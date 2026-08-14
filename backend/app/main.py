@@ -11,6 +11,7 @@ from app.api.routes import (
     benchmark,
     dashboard,
     dedup,
+    findings,
     proofs,
     projects,
     risk,
@@ -57,6 +58,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
     app.include_router(projects.router, prefix="/api")
+    app.include_router(findings.router, prefix="/api")
     app.include_router(validations.router, prefix="/api")
     app.include_router(proofs.router, prefix="/api")
     app.include_router(dedup.router, prefix="/api")

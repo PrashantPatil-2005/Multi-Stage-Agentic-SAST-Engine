@@ -64,7 +64,7 @@ export interface DashboardSummary {
   recent_activity: DashboardActivityItem[];
 }
 
-async function fetchJson<T>(path: string): Promise<T> {
+export async function fetchJson<T>(path: string): Promise<T> {
   const response = await fetch(path);
   if (!response.ok) {
     throw new Error(`request failed: ${path} (${response.status})`);

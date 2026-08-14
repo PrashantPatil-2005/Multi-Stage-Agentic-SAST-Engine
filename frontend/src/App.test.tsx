@@ -40,12 +40,12 @@ const EMPTY_SUMMARY = {
 beforeAll(() => {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (input: RequestInfo | URL) => ({
-      ok: true,
-      status: 200,
-      json: async () =>
-        String(input).includes("/api/projects") ? [] : EMPTY_SUMMARY,
-    })),
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/projects")) return { ok: true, status: 200, json: async () => [] };
+      if (url.includes("/api/findings")) return { ok: true, status: 200, json: async () => [] };
+      return { ok: true, status: 200, json: async () => EMPTY_SUMMARY };
+    }),
   );
 });
 
@@ -119,8 +119,7 @@ describe("application shell", () => {
     const user = userEvent.setup();
     renderApp();
     await user.click(screen.getByRole("link", { name: "Findings" }));
-    expect(mainHeading("Findings")).toBeInTheDocument();
-    expect(screen.getByText(/coming in Phase 3/i)).toBeInTheDocument();
+    expect(mainHeading("Security Findings")).toBeInTheDocument();
 
     await user.click(screen.getByRole("link", { name: "Benchmarks" }));
     expect(mainHeading("Benchmarks")).toBeInTheDocument();

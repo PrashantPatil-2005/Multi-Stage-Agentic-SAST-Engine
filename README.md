@@ -48,6 +48,7 @@ NOT part of the production pipeline.
 - [x] Human approval workflow (see `backend/app/approval/README.md`)
 - [x] Semgrep benchmark (optional evaluation path; see `backend/app/benchmark/README.md`)
 - [x] Dashboard overview (frontend; read-only summary API in `backend/app/api/routes/dashboard.py`)
+- [x] Findings list (frontend; read-only API in `backend/app/api/routes/findings.py`)
 
 ## Running the PREPARE stage (backend)
 

@@ -4,6 +4,8 @@ import { Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { DashboardPage } from "./pages/DashboardPage";
+import { FindingDetailPage } from "./pages/FindingDetailPage";
+import { FindingsPage } from "./pages/FindingsPage";
 import { ROUTES, PlaceholderPage } from "./pages/PlaceholderPage";
 import "./styles/shell.css";
 
@@ -13,10 +15,13 @@ export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const route = useMemo(
-    () => ROUTES.find((r) => r.path === location.pathname) ?? ROUTES[0],
-    [location.pathname],
-  );
+  const route = useMemo(() => {
+    const findingsDetail =
+      location.pathname.startsWith("/findings/") &&
+      location.pathname !== "/findings";
+    if (findingsDetail) return ROUTES.find((r) => r.path === "/findings")!;
+    return ROUTES.find((r) => r.path === location.pathname) ?? ROUTES[0];
+  }, [location.pathname]);
 
   /* close the drawer when the route changes (mobile) */
   useEffect(() => {
@@ -37,7 +42,13 @@ export default function App() {
 
   /* unknown routes land on the dashboard */
   useEffect(() => {
-    if (!ROUTES.some((r) => r.path === location.pathname)) {
+    const findingsDetail =
+      location.pathname.startsWith("/findings/") &&
+      location.pathname !== "/findings";
+    if (
+      !findingsDetail &&
+      !ROUTES.some((r) => r.path === location.pathname)
+    ) {
       navigate("/dashboard", { replace: true });
     }
   }, [location.pathname, navigate]);
@@ -67,7 +78,9 @@ export default function App() {
         <TopBar title={route.title} onOpenDrawer={() => setDrawerOpen(true)} />
         <main className="shell__content">
           <Routes>
-            {ROUTES.map((r) => (
+            <Route path="/findings" element={<FindingsPage />} />
+            <Route path="/findings/:id" element={<FindingDetailPage />} />
+            {ROUTES.filter((r) => r.path !== "/findings").map((r) => (
               <Route
                 key={r.path}
                 path={r.path}
