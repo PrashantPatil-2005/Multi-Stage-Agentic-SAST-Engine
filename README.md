@@ -11,7 +11,7 @@ evidence and confirms exploitability before anything is acted upon.
 
 ## Pipeline
 
-PREPARE → SCAN → DEDUPLICATE → RISK/SLA → VALIDATE → PROVE
+PREPARE → SCAN → DEDUPLICATE → RISK/SLA → VALIDATE → PROVE → HUMAN APPROVAL
 
 1. PREPARE: parse the repo into a code model (Python AST; CPG later) — no compilation needed
 2. SCAN: taint/data-flow analysis → candidate findings (SQLi, command injection, SSRF)
@@ -19,6 +19,7 @@ PREPARE → SCAN → DEDUPLICATE → RISK/SLA → VALIDATE → PROVE
 4. RISK/SLA: deterministic risk score + priority, SLA deadlines, breach escalation (see `backend/app/risk/README.md`)
 5. VALIDATE: LLM judges each finding against sealed code evidence → verdict + confidence
 6. PROVE: safe, sandboxed proof-of-concept evidence for confirmed findings
+7. HUMAN APPROVAL: auditable human-in-the-loop permission state before any action (see `backend/app/approval/README.md`)
 
 ## Tech Stack (planned)
 
@@ -40,7 +41,7 @@ PREPARE → SCAN → DEDUPLICATE → RISK/SLA → VALIDATE → PROVE
 - [x] SLA tracking and escalation (see `backend/app/risk/README.md`)
 - [x] VALIDATE: LLM-assisted finding validation (see `backend/app/validate/README.md`)
 - [x] PROVE: sandboxed verification (see `backend/app/prove/README.md`)
-- [ ] Human approval workflow
+- [x] Human approval workflow (see `backend/app/approval/README.md`)
 - [ ] Semgrep benchmark
 - [ ] Dashboard
 
@@ -78,6 +79,13 @@ No secrets are hardcoded.
 | POST | `/api/findings/{id}/sla/check` | Evaluate deadline (optional test time `{"now": ...}`) |
 | POST | `/api/findings/{id}/sla/resolve` | Mark SLA resolved (optional `{"resolved_at": ...}`) |
 | GET | `/api/findings/{id}/escalations` | Escalation event history |
+| POST | `/api/findings/{id}/approval` | Create an approval request (requires true_positive + verified proof) |
+| GET | `/api/findings/{id}/approval` | Latest approval request for a finding |
+| POST | `/api/approvals/{id}/approve` | Approve (terminal, audits reviewer + reason) |
+| POST | `/api/approvals/{id}/reject` | Reject (terminal) |
+| POST | `/api/approvals/{id}/request-changes` | Send back for changes |
+| POST | `/api/approvals/{id}/resubmit` | changes_requested → pending (version + 1) |
+| GET | `/api/approvals/{id}/history` | Append-only audit event trail |
 | GET | `/api/health` | Health check |
 
 Examples:
@@ -106,7 +114,7 @@ Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:8000/api/projects/$($resp.i
 
 ```powershell
 cd backend
-.\.venv\Scripts\python -m pytest        # 240 tests: PREPARE, SCAN (3 rules), DEDUP, RISK/SLA, VALIDATE, PROVE, API
+.\.venv\Scripts\python -m pytest        # 289 tests: PREPARE, SCAN (3 rules), DEDUP, RISK/SLA, VALIDATE, PROVE, APPROVAL, API
 ```
 
 The fixture repository `backend/tests/fixtures/vulnerable_python_app/` contains
