@@ -31,7 +31,8 @@ PREPARE → SCAN → VALIDATE → PROVE
 
 - [x] Architecture documented (ARCHITECTURE.md)
 - [x] PREPARE stage: repository ingestion + Python AST parsing + ProjectSnapshot + API
-- [ ] SCAN stage (taint analysis) — next
+- [x] SCAN stage: taint analysis for SQL injection + command injection (see `backend/app/scan/README.md`)
+- [ ] SCAN stage: SSRF rule — next
 - [ ] VALIDATE stage (LLM) — later
 - [ ] PROVE stage (sandboxed PoC) — later
 
