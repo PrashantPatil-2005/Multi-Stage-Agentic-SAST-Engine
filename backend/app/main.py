@@ -1,4 +1,4 @@
-"""FastAPI application entrypoint (PREPARE + SCAN + VALIDATE + PROVE)."""
+"""FastAPI application entrypoint (PREPARE + SCAN + DEDUP + RISK/SLA + VALIDATE + PROVE)."""
 
 import logging
 from contextlib import asynccontextmanager
@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import proofs, projects, validations
+from app.api.routes import dedup, proofs, projects, risk, validations
 from app.config import Settings, get_settings
 from app.db.session import init_db, make_engine, make_session_factory
 from app.prepare.parser import PythonASTParser
@@ -50,6 +50,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(projects.router, prefix="/api")
     app.include_router(validations.router, prefix="/api")
     app.include_router(proofs.router, prefix="/api")
+    app.include_router(dedup.router, prefix="/api")
+    app.include_router(risk.router, prefix="/api")
 
     @app.get("/api/health")
     def health() -> dict:

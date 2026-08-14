@@ -11,12 +11,14 @@ evidence and confirms exploitability before anything is acted upon.
 
 ## Pipeline
 
-PREPARE → SCAN → VALIDATE → PROVE
+PREPARE → SCAN → DEDUPLICATE → RISK/SLA → VALIDATE → PROVE
 
 1. PREPARE: parse the repo into a code model (Python AST; CPG later) — no compilation needed
 2. SCAN: taint/data-flow analysis → candidate findings (SQLi, command injection, SSRF)
-3. VALIDATE: LLM judges each finding against sealed code evidence → verdict + confidence
-4. PROVE: safe, sandboxed proof-of-concept evidence for confirmed findings
+3. DEDUPLICATE: group structurally identical findings across repositories (see `backend/app/dedup/README.md`)
+4. RISK/SLA: deterministic risk score + priority, SLA deadlines, breach escalation (see `backend/app/risk/README.md`)
+5. VALIDATE: LLM judges each finding against sealed code evidence → verdict + confidence
+6. PROVE: safe, sandboxed proof-of-concept evidence for confirmed findings
 
 ## Tech Stack (planned)
 
@@ -33,12 +35,14 @@ PREPARE → SCAN → VALIDATE → PROVE
 - [x] SCAN: SQL Injection
 - [x] SCAN: Command Injection
 - [x] SCAN: SSRF (see `backend/app/scan/README.md`)
+- [x] Cross-repository finding deduplication (see `backend/app/dedup/README.md`)
+- [x] Risk prioritization (see `backend/app/risk/README.md`)
+- [x] SLA tracking and escalation (see `backend/app/risk/README.md`)
 - [x] VALIDATE: LLM-assisted finding validation (see `backend/app/validate/README.md`)
 - [x] PROVE: sandboxed verification (see `backend/app/prove/README.md`)
-- [ ] Deduplication
-- [ ] SLA
 - [ ] Human approval workflow
 - [ ] Semgrep benchmark
+- [ ] Dashboard
 
 ## Running the PREPARE stage (backend)
 
@@ -65,6 +69,15 @@ No secrets are hardcoded.
 | GET | `/api/findings/{id}/validation` | Stored ValidationResult for a finding |
 | POST | `/api/findings/{id}/prove` | Sandboxed proof (only for `true_positive` findings) |
 | GET | `/api/findings/{id}/proof` | Stored ProofResult for a finding |
+| POST | `/api/deduplicate` | Group findings (by id) into structural deduplication groups |
+| GET | `/api/deduplication/{fingerprint}` | One deduplication group (by fingerprint) |
+| POST | `/api/findings/{id}/risk` | Deterministic risk assessment (uses stored validation/proof) |
+| GET | `/api/findings/{id}/risk` | Stored RiskAssessment |
+| POST | `/api/findings/{id}/sla` | Create SLA record from stored risk |
+| GET | `/api/findings/{id}/sla` | Stored SLARecord |
+| POST | `/api/findings/{id}/sla/check` | Evaluate deadline (optional test time `{"now": ...}`) |
+| POST | `/api/findings/{id}/sla/resolve` | Mark SLA resolved (optional `{"resolved_at": ...}`) |
+| GET | `/api/findings/{id}/escalations` | Escalation event history |
 | GET | `/api/health` | Health check |
 
 Examples:
@@ -93,7 +106,7 @@ Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:8000/api/projects/$($resp.i
 
 ```powershell
 cd backend
-.\.venv\Scripts\python -m pytest        # 165 tests: PREPARE, SCAN (3 rules), VALIDATE, PROVE, API
+.\.venv\Scripts\python -m pytest        # 240 tests: PREPARE, SCAN (3 rules), DEDUP, RISK/SLA, VALIDATE, PROVE, API
 ```
 
 The fixture repository `backend/tests/fixtures/vulnerable_python_app/` contains
