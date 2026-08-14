@@ -47,7 +47,7 @@ NOT part of the production pipeline.
 - [x] PROVE: sandboxed verification (see `backend/app/prove/README.md`)
 - [x] Human approval workflow (see `backend/app/approval/README.md`)
 - [x] Semgrep benchmark (optional evaluation path; see `backend/app/benchmark/README.md`)
-- [ ] Dashboard
+- [x] Dashboard overview (frontend; read-only summary API in `backend/app/api/routes/dashboard.py`)
 
 ## Running the PREPARE stage (backend)
 

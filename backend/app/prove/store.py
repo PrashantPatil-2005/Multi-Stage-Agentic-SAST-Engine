@@ -13,6 +13,10 @@ class ProofStore:
     def get(self, finding_id: str) -> ProofResult | None:
         return self._results.get(finding_id)
 
+    def all(self) -> list[ProofResult]:
+        """Read-only enumeration (used by read/summary endpoints)."""
+        return list(self._results.values())
+
     def clear(self) -> None:
         self._results.clear()
 

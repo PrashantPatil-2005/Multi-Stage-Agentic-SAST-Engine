@@ -112,5 +112,10 @@ def lookup_group(fingerprint: str) -> DeduplicationGroup | None:
     return _GROUPS.get(fingerprint)
 
 
+def all_groups() -> list[DeduplicationGroup]:
+    """Read-only enumeration (used by read/summary endpoints)."""
+    return list(_GROUPS.values())
+
+
 def reset_groups() -> None:
     _GROUPS.clear()

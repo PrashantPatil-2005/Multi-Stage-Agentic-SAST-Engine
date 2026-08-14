@@ -41,6 +41,14 @@ class ApprovalStore:
     def events_for(self, approval_id: str) -> list[ApprovalEvent]:
         return list(self._events.get(approval_id, []))
 
+    def all(self) -> list[ApprovalRequest]:
+        """Read-only enumeration (used by read/summary endpoints)."""
+        return list(self._requests.values())
+
+    def all_events(self) -> list[ApprovalEvent]:
+        """Read-only enumeration of every recorded event (newest last)."""
+        return [event for events in self._events.values() for event in events]
+
     def clear(self) -> None:
         self._requests.clear()
         self._events.clear()

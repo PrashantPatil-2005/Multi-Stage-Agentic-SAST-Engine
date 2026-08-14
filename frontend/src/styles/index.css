@@ -1,0 +1,12 @@
+/* Global styles, kept intentionally small (component styles live beside
+   their components). */
+
+body {
+  text-rendering: optimizeLegibility;
+}
+
+code,
+pre,
+kbd {
+  font-family: var(--font-mono);
+}

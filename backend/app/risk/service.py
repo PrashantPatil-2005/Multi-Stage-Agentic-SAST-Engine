@@ -229,6 +229,21 @@ def record_escalation_event(event: EscalationEvent) -> None:
     _escalation_store.setdefault(event.finding_id, []).append(event)
 
 
+def all_risk_assessments() -> list[RiskAssessment]:
+    """Read-only enumeration (used by read/summary endpoints)."""
+    return list(_risk_store.values())
+
+
+def all_sla_records() -> list[SLARecord]:
+    """Read-only enumeration (used by read/summary endpoints)."""
+    return list(_sla_store.values())
+
+
+def all_escalation_events() -> list[EscalationEvent]:
+    """Read-only enumeration (used by read/summary endpoints)."""
+    return [event for events in _escalation_store.values() for event in events]
+
+
 def reset_risk_stores() -> None:
     _risk_store.clear()
     _sla_store.clear()

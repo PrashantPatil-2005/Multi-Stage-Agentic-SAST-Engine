@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request
 
+from app.api.dashboard_models import DashboardProject
 from app.api.schemas import FileMeta, ProjectDetail, ProjectOut
 from app.core.contracts import RepoSpec
 from app.db.models import Project
@@ -65,6 +66,14 @@ def create_project(payload: RepoSpec, request: Request) -> ProjectOut:
         created_at=snapshot.created_at,
         summary=snapshot.summary,
     )
+
+
+@router.get("", response_model=list[DashboardProject])
+def list_projects(request: Request) -> list[DashboardProject]:
+    """List ingested repositories (id + name), newest first."""
+    with request.app.state.session_factory() as session:
+        rows = session.query(Project).order_by(Project.created_at.desc()).all()
+    return [DashboardProject(id=project.id, name=project.name) for project in rows]
 
 
 @router.get("/{project_id}", response_model=ProjectDetail)

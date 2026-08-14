@@ -26,6 +26,10 @@ class FindingStore:
     def get(self, finding_id: str) -> CandidateFinding | None:
         return self._findings.get(finding_id)
 
+    def all(self) -> list[CandidateFinding]:
+        """Read-only enumeration (used by read/summary endpoints)."""
+        return list(self._findings.values())
+
     def clear(self) -> None:
         self._findings.clear()
 
@@ -41,6 +45,10 @@ class ValidationStore:
 
     def get(self, finding_id: str) -> ValidationResult | None:
         return self._results.get(finding_id)
+
+    def all(self) -> list[ValidationResult]:
+        """Read-only enumeration (used by read/summary endpoints)."""
+        return list(self._results.values())
 
     def clear(self) -> None:
         self._results.clear()

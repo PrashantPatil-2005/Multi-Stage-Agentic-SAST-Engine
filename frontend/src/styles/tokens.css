@@ -1,0 +1,126 @@
+/* Design tokens — professional cybersecurity SaaS style.
+   Dark and light themes share the same token names; values switch on
+   [data-theme]. Colors are never hardcoded in components. */
+
+:root {
+  --font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+
+  /* fixed metrics */
+  --sidebar-width: 240px;
+  --sidebar-width-collapsed: 56px;
+  --topbar-height: 56px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --border-width: 1px;
+
+  /* motion */
+  --transition-fast: 120ms ease;
+  --transition-base: 180ms ease;
+
+  /* semantic aliases (resolved per theme below) */
+  --color-bg: var(--token-bg);
+  --color-surface: var(--token-surface);
+  --color-surface-raised: var(--token-surface-raised);
+  --color-border: var(--token-border);
+  --color-text: var(--token-text);
+  --color-text-muted: var(--token-text-muted);
+  --color-primary: var(--token-primary);
+  --color-primary-hover: var(--token-primary-hover);
+  --color-success: var(--token-success);
+  --color-warning: var(--token-warning);
+  --color-danger: var(--token-danger);
+  --color-focus: var(--token-focus);
+  --color-selection: var(--token-selection);
+}
+
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --token-bg: #0f1115;
+  --token-surface: #161a21;
+  --token-surface-raised: #1c212b;
+  --token-border: #2a303c;
+  --token-text: #e6e9ef;
+  --token-text-muted: #9aa3b2;
+  --token-primary: #3b82f6;
+  --token-primary-hover: #60a5fa;
+  --token-success: #34d399;
+  --token-warning: #fbbf24;
+  --token-danger: #f87171;
+  --token-focus: #60a5fa;
+  --token-selection: rgba(59, 130, 246, 0.28);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --token-bg: #f4f5f7;
+  --token-surface: #ffffff;
+  --token-surface-raised: #ffffff;
+  --token-border: #d8dce3;
+  --token-text: #1a1d24;
+  --token-text-muted: #5d6572;
+  --token-primary: #2563eb;
+  --token-primary-hover: #1d4ed8;
+  --token-success: #059669;
+  --token-warning: #b45309;
+  --token-danger: #dc2626;
+  --token-focus: #2563eb;
+  --token-selection: rgba(37, 99, 235, 0.16);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-family);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text);
+  background: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+::selection {
+  background: var(--color-selection);
+}
+
+/* visible focus for keyboard users */
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

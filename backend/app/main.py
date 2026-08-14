@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import (
     approval,
     benchmark,
+    dashboard,
     dedup,
     proofs,
     projects,
@@ -62,6 +63,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(risk.router, prefix="/api")
     app.include_router(approval.router, prefix="/api")
     app.include_router(benchmark.router, prefix="/api")
+    app.include_router(dashboard.router, prefix="/api")
 
     @app.get("/api/health")
     def health() -> dict:
