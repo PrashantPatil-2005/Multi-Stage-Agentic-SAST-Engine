@@ -34,10 +34,10 @@ PREPARE → SCAN → VALIDATE → PROVE
 - [x] SCAN: Command Injection
 - [x] SCAN: SSRF (see `backend/app/scan/README.md`)
 - [x] VALIDATE: LLM-assisted finding validation (see `backend/app/validate/README.md`)
-- [ ] PROVE: sandboxed PoC — next
+- [x] PROVE: sandboxed verification (see `backend/app/prove/README.md`)
 - [ ] Deduplication
-- [ ] Human approval
 - [ ] SLA
+- [ ] Human approval workflow
 - [ ] Semgrep benchmark
 
 ## Running the PREPARE stage (backend)
@@ -63,6 +63,8 @@ No secrets are hardcoded.
 | GET | `/api/projects/{id}` | Project metadata + parsed file summary |
 | POST | `/api/findings/{id}/validate` | LLM-validate a candidate finding (`LLM_*` env config required) |
 | GET | `/api/findings/{id}/validation` | Stored ValidationResult for a finding |
+| POST | `/api/findings/{id}/prove` | Sandboxed proof (only for `true_positive` findings) |
+| GET | `/api/findings/{id}/proof` | Stored ProofResult for a finding |
 | GET | `/api/health` | Health check |
 
 Examples:
@@ -91,7 +93,7 @@ Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:8000/api/projects/$($resp.i
 
 ```powershell
 cd backend
-.\.venv\Scripts\python -m pytest        # 135 tests: PREPARE, SCAN (3 rules), VALIDATE, API
+.\.venv\Scripts\python -m pytest        # 165 tests: PREPARE, SCAN (3 rules), VALIDATE, PROVE, API
 ```
 
 The fixture repository `backend/tests/fixtures/vulnerable_python_app/` contains
