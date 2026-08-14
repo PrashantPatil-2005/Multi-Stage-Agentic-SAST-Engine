@@ -21,6 +21,10 @@ PREPARE → SCAN → DEDUPLICATE → RISK/SLA → VALIDATE → PROVE → HUMAN A
 6. PROVE: safe, sandboxed proof-of-concept evidence for confirmed findings
 7. HUMAN APPROVAL: auditable human-in-the-loop permission state before any action (see `backend/app/approval/README.md`)
 
+Semgrep benchmarking (`backend/app/benchmark/`) is an **optional evaluation
+path** that compares our engine against Semgrep on controlled fixtures. It is
+NOT part of the production pipeline.
+
 ## Tech Stack (planned)
 
 - Backend: Python + FastAPI, pytest
@@ -42,7 +46,7 @@ PREPARE → SCAN → DEDUPLICATE → RISK/SLA → VALIDATE → PROVE → HUMAN A
 - [x] VALIDATE: LLM-assisted finding validation (see `backend/app/validate/README.md`)
 - [x] PROVE: sandboxed verification (see `backend/app/prove/README.md`)
 - [x] Human approval workflow (see `backend/app/approval/README.md`)
-- [ ] Semgrep benchmark
+- [x] Semgrep benchmark (optional evaluation path; see `backend/app/benchmark/README.md`)
 - [ ] Dashboard
 
 ## Running the PREPARE stage (backend)
@@ -86,6 +90,8 @@ No secrets are hardcoded.
 | POST | `/api/approvals/{id}/request-changes` | Send back for changes |
 | POST | `/api/approvals/{id}/resubmit` | changes_requested → pending (version + 1) |
 | GET | `/api/approvals/{id}/history` | Append-only audit event trail |
+| POST | `/api/benchmarks/semgrep` | Benchmark our engine vs Semgrep on a controlled fixture (offline; `semgrep` optional) |
+| GET | `/api/benchmarks/{benchmark_id}` | Stored benchmark report |
 | GET | `/api/health` | Health check |
 
 Examples:
@@ -114,7 +120,7 @@ Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:8000/api/projects/$($resp.i
 
 ```powershell
 cd backend
-.\.venv\Scripts\python -m pytest        # 289 tests: PREPARE, SCAN (3 rules), DEDUP, RISK/SLA, VALIDATE, PROVE, APPROVAL, API
+.\.venv\Scripts\python -m pytest        # 340 tests: PREPARE, SCAN (3 rules), DEDUP, RISK/SLA, VALIDATE, PROVE, APPROVAL, BENCHMARK, API
 ```
 
 The fixture repository `backend/tests/fixtures/vulnerable_python_app/` contains

@@ -45,3 +45,7 @@ def fetch_safe() -> str:
     import requests
 
     return requests.get("https://example.com").text
+
+
+def run_command_safe() -> None:
+    subprocess.run("ls -la", shell=True)

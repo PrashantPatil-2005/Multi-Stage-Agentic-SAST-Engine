@@ -6,7 +6,15 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import approval, dedup, proofs, projects, risk, validations
+from app.api.routes import (
+    approval,
+    benchmark,
+    dedup,
+    proofs,
+    projects,
+    risk,
+    validations,
+)
 from app.config import Settings, get_settings
 from app.db.session import init_db, make_engine, make_session_factory
 from app.prepare.parser import PythonASTParser
@@ -53,6 +61,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(dedup.router, prefix="/api")
     app.include_router(risk.router, prefix="/api")
     app.include_router(approval.router, prefix="/api")
+    app.include_router(benchmark.router, prefix="/api")
 
     @app.get("/api/health")
     def health() -> dict:

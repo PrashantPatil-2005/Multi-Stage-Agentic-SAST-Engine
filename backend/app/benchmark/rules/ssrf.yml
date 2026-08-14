@@ -1,0 +1,13 @@
+rules:
+  - id: benchmark-ssrf
+    languages: [python]
+    severity: WARNING
+    message: >-
+      Potential SSRF: an HTTP request URL that is not a hardcoded literal.
+      Hardcoded https:// URLs are excluded (safe constant requests).
+    patterns:
+      - pattern-either:
+          - pattern: requests.get($URL, ...)
+          - pattern: requests.post($URL, ...)
+          - pattern: requests.request($METHOD, $URL, ...)
+      - pattern-not-regex: requests\.(get|post|request)\(\s*["']https?://

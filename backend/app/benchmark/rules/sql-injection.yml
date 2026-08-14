@@ -1,0 +1,23 @@
+rules:
+  - id: benchmark-sql-injection
+    languages: [python]
+    severity: WARNING
+    message: >-
+      Potential SQL injection: a SQL statement is built with string
+      interpolation and passed to a database execute call.
+    patterns:
+      - pattern-inside: |
+          $DB.execute($Q)
+      - pattern-either:
+          - pattern: $Q = f"...{$X}..."
+          - pattern: $Q = $A % $B
+          - pattern: $Q = $A.format($B)
+          - pattern: $Q = $A + $B
+      - pattern-not: $Q = "..."
+  - id: benchmark-sql-injection-direct-fstring
+    languages: [python]
+    severity: WARNING
+    message: >-
+      Potential SQL injection: f-string passed directly to execute.
+    pattern: |
+      $DB.execute(f"...{$X}...")

@@ -1,0 +1,14 @@
+rules:
+  - id: benchmark-command-injection
+    languages: [python]
+    severity: WARNING
+    message: >-
+      Potential command injection: a shell is spawned via subprocess or
+      os.system. Semgrep cannot prove the argument is a constant, so safe
+      constant commands are also reported (expected false positives the
+      benchmark counts).
+    pattern-either:
+      - pattern: subprocess.run($CMD, shell=True)
+      - pattern: subprocess.call($CMD, shell=True)
+      - pattern: subprocess.Popen($CMD, shell=True)
+      - pattern: os.system($CMD)
