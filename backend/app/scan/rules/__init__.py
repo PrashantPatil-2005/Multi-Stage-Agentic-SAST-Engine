@@ -35,6 +35,15 @@ class ScanRule(ABC):
         """True when the sink call neutralizes the tainted data (e.g. parameterized SQL)."""
         return False
 
+    def sink_expression(self, call: ast.Call) -> ast.AST | None:
+        """The expression whose taint matters at a matched sink.
+
+        Most rules taint-check the first positional argument; rules with a
+        different URL/command position (e.g. ``requests.request("GET", url)``)
+        override this.
+        """
+        return call.args[0] if call.args else None
+
     def confidence(self, path: list[TaintStep], source_kind: str) -> float:
         """Deterministic scanner confidence in [0, 1] (no LLM)."""
         return 0.7

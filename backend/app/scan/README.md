@@ -9,11 +9,12 @@ AST extracted from each file's actual source.
 
 - [SQL injection](#sql-injection) — `backend/app/scan/rules/sql_injection.py`
 - [Command injection](#command-injection) — `backend/app/scan/rules/command_injection.py`
+- [SSRF](#ssrf) — `backend/app/scan/rules/ssrf.py`
 
 Each rule implements the `ScanRule` contract (`is_source`, `match_sink`,
-`is_sanitized`, `confidence`, `poison_params`) and is driven by the same
-`TaintEngine`. Shared logic (request-object sources, confidence scoring)
-lives in `backend/app/scan/rules/common.py`.
+`is_sanitized`, `sink_expression`, `confidence`, `poison_params`) and is
+driven by the same `TaintEngine`. Shared logic (request-object sources,
+confidence scoring) lives in `backend/app/scan/rules/common.py`.
 
 ## How taint analysis works
 
@@ -154,6 +155,70 @@ matching time.
 Shared scoring (see below): request-origin flow 0.9, poisoned-param flow
 0.7, minus 0.1 for chains of >= 3 intermediate steps.
 
+## SSRF
+
+`backend/app/scan/rules/ssrf.py`
+
+### Sources
+
+Identical to the other rules: Flask-style `request` objects (`request.args` /
+`form` / `values` / `json` / `cookies` / `headers`) plus poisoned function
+parameters, via shared `rules/common.py` logic.
+
+### Sinks
+
+Python HTTP client APIs — kind `http_request`:
+
+| API | URL position |
+|---|---|
+| `requests.get / post / put / delete / patch / head / options` | first positional |
+| `requests.request(method, url)` | second positional |
+| `httpx.get / post / put / delete / patch` | first positional |
+| `httpx.request(method, url)` | second positional |
+| `urllib.request.urlopen(url)` | first positional |
+
+### URL argument handling
+
+The URL is located by the rule's `sink_expression` hook (the shared engine
+only taint-checks the expression that hook returns):
+
+1. an explicit `url=` keyword argument wins;
+2. otherwise positional: the first argument for regular verbs, the second
+   for `*.request(method, url)`.
+
+A finding is emitted **only when that URL expression carries tainted data** —
+HTTP requests with constant URLs are never flagged, and neither are
+constant-URL variables (`url = "https://example.com/api"; requests.get(url)`).
+
+### Propagation
+
+Everything the shared engine already supports: direct taint, assignments,
+f-strings, `+` concatenation, `%` formatting, `.format()`, attribute /
+subscript access, collection literals, loop variables, augmented assignment.
+
+### Safe cases (MVP scope)
+
+- constant URL literals and constant-URL variables → ignored
+- shell commands (`subprocess`/`os`) are command injection's domain, never SSRF
+- no target classification yet: `localhost`, `127.0.0.1`, private IPs and
+  cloud metadata endpoints are NOT special-cased. The scanner's job at this
+  stage is exactly *user controlled input → HTTP request sink*; the rule is
+  structured (`sink_expression` + rule-level hooks) so that a target
+  classifier (hostname/IP/metadata heuristics) can be slotted in later
+  without touching the engine.
+
+### No network requests, ever
+
+The scanner is a pure AST analysis. It never executes the analyzed code and
+never resolves or fetches URLs found in the repository — findings are built
+from syntax and static data flow only. (Enforced by tests that monkeypatch
+`urllib.request.urlopen` and `socket.socket` to fail.)
+
+### Confidence
+
+Shared scoring: request-origin flow 0.9, poisoned-param flow 0.7, minus 0.1
+for chains of >= 3 intermediate steps.
+
 ## Confidence calculation
 
 Deterministic, documented, no LLM:
@@ -181,6 +246,11 @@ Deterministic, documented, no LLM:
 - Command list-form invocations are never flagged (see command injection
   section); `shlex.quote`-wrapped commands are treated as safe by
   non-propagation through unknown calls.
+- HTTP sinks are matched on the exact dotted name (`import requests as r` /
+  `from requests import get` are missed); `requests.request` is only
+  recognized with the URL as second positional or `url=` keyword.
+- SSRF has no target classification (localhost / private IP / metadata
+  endpoints are all treated alike) — see the SSRF section.
 - Module/class-level control flow is linearized (order-dependent).
 
 ## Future cross-function analysis

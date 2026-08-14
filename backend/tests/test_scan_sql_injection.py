@@ -232,9 +232,10 @@ def test_executemany_sink_detected():
 
 def test_fixture_app_multiple_findings():
     report = scan_fixture_files("app.py", "db.py")
-    assert report.summary.total == 4
+    assert report.summary.total == 5
     assert report.summary.by_type["sql_injection"] == 3
     assert report.summary.by_type["command_injection"] == 1
+    assert report.summary.by_type["ssrf"] == 1
     files = {f.sink.file for f in report.findings}
     assert files == {"app.py", "db.py"}
 
@@ -291,7 +292,11 @@ def test_scan_report_structure():
     report = scan_fixture_files("app.py")
     assert report.id
     assert report.summary.total == len(report.findings)
-    assert report.summary.by_type == {"sql_injection": 1, "command_injection": 1}
+    assert report.summary.by_type == {
+        "sql_injection": 1,
+        "command_injection": 1,
+        "ssrf": 1,
+    }
     assert report.scanned_file_count == 1
     assert any(s.qualified_name == "get_user" for s in report.function_summaries)
 

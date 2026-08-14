@@ -344,7 +344,11 @@ def test_deterministic_results():
 def test_sql_tests_still_pass_alongside():
     report = scan_fixture_files("app.py")
     by_type = report.summary.by_type
-    assert by_type == {"sql_injection": 1, "command_injection": 1}
+    assert by_type == {
+        "sql_injection": 1,
+        "command_injection": 1,
+        "ssrf": 1,
+    }
     sql = next(f for f in report.findings if f.vulnerability_type == "sql_injection")
     cmd = next(f for f in report.findings if f.vulnerability_type == "command_injection")
     assert sql.sink.line == 15  # conn.execute(query)

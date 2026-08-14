@@ -29,12 +29,16 @@ PREPARE → SCAN → VALIDATE → PROVE
 
 ## Status
 
-- [x] Architecture documented (ARCHITECTURE.md)
-- [x] PREPARE stage: repository ingestion + Python AST parsing + ProjectSnapshot + API
-- [x] SCAN stage: taint analysis for SQL injection + command injection (see `backend/app/scan/README.md`)
-- [ ] SCAN stage: SSRF rule — next
-- [ ] VALIDATE stage (LLM) — later
-- [ ] PROVE stage (sandboxed PoC) — later
+- [x] PREPARE: repository ingestion + Python AST parsing + ProjectSnapshot + API
+- [x] SCAN: SQL Injection
+- [x] SCAN: Command Injection
+- [x] SCAN: SSRF (see `backend/app/scan/README.md`)
+- [x] VALIDATE: LLM-assisted finding validation (see `backend/app/validate/README.md`)
+- [ ] PROVE: sandboxed PoC — next
+- [ ] Deduplication
+- [ ] Human approval
+- [ ] SLA
+- [ ] Semgrep benchmark
 
 ## Running the PREPARE stage (backend)
 
@@ -51,12 +55,14 @@ uvicorn app.main:app --reload         # http://127.0.0.1:8000
 Configuration is via environment variables / `.env` (see `.env.example`, prefix `SAST_`).
 No secrets are hardcoded.
 
-### API endpoints (PREPARE)
+### API endpoints
 
 | Method | Path | Description |
 |---|---|---|
 | POST | `/api/projects` | Ingest a repo (directory / zip / git) and build its ProjectSnapshot |
 | GET | `/api/projects/{id}` | Project metadata + parsed file summary |
+| POST | `/api/findings/{id}/validate` | LLM-validate a candidate finding (`LLM_*` env config required) |
+| GET | `/api/findings/{id}/validation` | Stored ValidationResult for a finding |
 | GET | `/api/health` | Health check |
 
 Examples:
@@ -85,7 +91,7 @@ Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:8000/api/projects/$($resp.i
 
 ```powershell
 cd backend
-.\.venv\Scripts\python -m pytest        # 31 tests: parser, fetcher, service, API
+.\.venv\Scripts\python -m pytest        # 135 tests: PREPARE, SCAN (3 rules), VALIDATE, API
 ```
 
 The fixture repository `backend/tests/fixtures/vulnerable_python_app/` contains

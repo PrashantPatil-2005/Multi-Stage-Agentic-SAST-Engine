@@ -16,6 +16,7 @@ from app.scan.models import CandidateFinding, FunctionSummary, ScanReport, ScanS
 from app.scan.rules import ScanRule
 from app.scan.rules.command_injection import CommandInjectionRule
 from app.scan.rules.sql_injection import SqlInjectionRule
+from app.scan.rules.ssrf import SSRFRule
 from app.scan.taint_engine import TaintEngine
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,11 @@ logger = logging.getLogger(__name__)
 
 class ScanService:
     def __init__(self, rules: list[ScanRule] | None = None) -> None:
-        self._rules = rules if rules is not None else [SqlInjectionRule(), CommandInjectionRule()]
+        self._rules = rules if rules is not None else [
+            SqlInjectionRule(),
+            CommandInjectionRule(),
+            SSRFRule(),
+        ]
 
     def scan(self, code_model: CodeModel) -> ScanReport:
         findings: list[CandidateFinding] = []

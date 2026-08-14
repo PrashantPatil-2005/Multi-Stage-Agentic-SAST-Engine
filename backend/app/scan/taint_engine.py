@@ -405,9 +405,10 @@ class TaintEngine:
             if self._rule.is_sanitized(call, sink):
                 logger.debug("sanitized sink skipped at %s:%d", ctx.file, sink.line)
                 continue
-            if not call.args:
+            target = self._rule.sink_expression(call)
+            if target is None:
                 continue
-            taint = self._taint_of(ctx, call.args[0], tainted)
+            taint = self._taint_of(ctx, target, tainted)
             if taint is None:
                 continue
             if summary is not None:

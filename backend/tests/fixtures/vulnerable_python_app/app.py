@@ -39,3 +39,9 @@ def fetch_url(url: str) -> str:
 
     response = requests.get(url, timeout=5)
     return response.text
+
+
+def fetch_safe() -> str:
+    import requests
+
+    return requests.get("https://example.com").text
