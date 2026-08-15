@@ -133,7 +133,7 @@ describe("dashboard page", () => {
     expect(screen.getByRole("heading", { name: "SLA summary" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Verification" })).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Recent activity" }),
+      await screen.findByRole("heading", { name: "Recent activity" }),
     ).toBeInTheDocument();
   });
 

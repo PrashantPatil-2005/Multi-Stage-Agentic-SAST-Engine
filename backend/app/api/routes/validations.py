@@ -23,7 +23,7 @@ router = APIRouter(prefix="/findings", tags=["validation"])
 
 
 class ValidateRequest(BaseModel):
-    provider: str = "openai_compatible"
+    provider: str = "huggingface"
 
 
 def get_validation_service() -> ValidationService:

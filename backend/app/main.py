@@ -3,6 +3,7 @@
 import logging
 from contextlib import asynccontextmanager
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -14,8 +15,12 @@ from app.api.routes import (
     findings,
     proofs,
     projects,
+    proof_summary,
+    repositories,
     risk,
+    risk_summary,
     validations,
+    validation_summary,
 )
 from app.config import Settings, get_settings
 from app.db.session import init_db, make_engine, make_session_factory
@@ -31,6 +36,9 @@ def configure_logging(level: str) -> None:
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
+    # Load .env into the process environment so LLM_* provider settings in
+    # backend/.env are visible to os.getenv (existing variables win).
+    load_dotenv(".env")
     settings = settings or get_settings()
     configure_logging(settings.log_level)
 
@@ -66,6 +74,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(approval.router, prefix="/api")
     app.include_router(benchmark.router, prefix="/api")
     app.include_router(dashboard.router, prefix="/api")
+    app.include_router(risk_summary.router, prefix="/api")
+    app.include_router(validation_summary.router, prefix="/api")
+    app.include_router(proof_summary.router, prefix="/api")
+    app.include_router(repositories.router, prefix="/api")
 
     @app.get("/api/health")
     def health() -> dict:

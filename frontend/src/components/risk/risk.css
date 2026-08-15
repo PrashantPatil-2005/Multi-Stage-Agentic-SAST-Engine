@@ -1,0 +1,423 @@
+/* Risk & SLA page styles - enterprise security operations UI, restrained
+   visual language matching the existing dashboard. */
+
+.risk-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.risk-kpi-grid .dash-kpi-card {
+  min-width: 0;
+}
+
+.risk-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.risk-column {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+.risk-section {
+  margin-bottom: 20px;
+}
+
+.risk-section .ui-card {
+  height: 100%;
+}
+
+/* Distributions -------------------------------------------------------- */
+
+.risk-empty-text {
+  color: var(--ui-text-secondary, #6b7280);
+  font-size: 14px;
+  margin: 4px 0;
+}
+
+.risk-bars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.risk-bar__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.risk-bar__label {
+  min-width: 44px;
+  text-align: center;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.risk-bar__label--score {
+  display: inline-block;
+  background: var(--ui-bg-muted, #f3f4f6);
+  border: 1px solid var(--ui-border, #e5e7eb);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ui-text, #111827);
+}
+
+.risk-bar__text {
+  font-size: 13px;
+  color: var(--ui-text-secondary, #6b7280);
+}
+
+.risk-bar__track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--ui-bg-muted, #f3f4f6);
+  overflow: hidden;
+}
+
+.risk-bar__fill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--risk-p0, #dc2626);
+  transition: width 0.2s ease;
+}
+
+.risk-bar__fill--score {
+  background: var(--risk-score, #2563eb);
+}
+
+/* Tables ---------------------------------------------------------------- */
+
+.risk-table-scroll {
+  overflow-x: auto;
+}
+
+.risk-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.risk-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--ui-text-secondary, #6b7280);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--ui-border, #e5e7eb);
+  white-space: nowrap;
+}
+
+.risk-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--ui-border-subtle, #f3f4f6);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.risk-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.risk-table__row {
+  cursor: pointer;
+}
+
+.risk-table__row:hover {
+  background: var(--ui-bg-muted, #f9fafb);
+}
+
+.risk-table__row:focus-visible {
+  outline: 2px solid var(--ui-focus, #2563eb);
+  outline-offset: -2px;
+}
+
+.risk-table__row--breach {
+  background: var(--risk-breach-bg, #fef2f2);
+}
+
+.risk-table__row--breach:hover {
+  background: var(--risk-breach-bg-hover, #fee2e2);
+}
+
+.risk-table__link {
+  color: var(--ui-link, #2563eb);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.risk-table__link:hover {
+  text-decoration: underline;
+}
+
+.risk-table__score {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* SLA overview ----------------------------------------------------------- */
+
+.risk-sla-overview {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.risk-sla-overview__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.risk-sla-overview__value {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Breaches ---------------------------------------------------------------- */
+
+.risk-breaches {
+  border-color: var(--risk-breach-border, #fca5a5);
+}
+
+.risk-breaches .ui-card__title::after {
+  content: "";
+}
+
+/* Risk factors ------------------------------------------------------------- */
+
+.risk-factors {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ui-border, #e5e7eb);
+}
+
+.risk-factors__title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ui-text-secondary, #6b7280);
+}
+
+.risk-factors__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.risk-factors__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--ui-bg-muted, #f3f4f6);
+  border: 1px solid var(--ui-border, #e5e7eb);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.risk-factors__name {
+  color: var(--ui-text, #111827);
+  font-weight: 600;
+}
+
+.risk-factors__points {
+  color: var(--ui-text-secondary, #6b7280);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Timeline ------------------------------------------------------------------ */
+
+.risk-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: relative;
+}
+
+.risk-timeline__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 10px 0 10px 16px;
+  position: relative;
+}
+
+.risk-timeline__item::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 18px;
+  bottom: -14px;
+  width: 2px;
+  background: var(--ui-border, #e5e7eb);
+}
+
+.risk-timeline__item:last-child::before {
+  display: none;
+}
+
+.risk-timeline__item::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 16px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--risk-p0, #dc2626);
+  border: 2px solid #fff;
+}
+
+.risk-timeline__levels {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 110px;
+}
+
+.risk-timeline__arrow {
+  color: var(--ui-text-secondary, #6b7280);
+}
+
+.risk-timeline__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.risk-timeline__reason {
+  margin: 0 0 2px;
+  font-size: 13px;
+  color: var(--ui-text, #111827);
+}
+
+.risk-timeline__meta {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ui-text-secondary, #6b7280);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.risk-timeline__time {
+  font-size: 12px;
+  color: var(--ui-text-secondary, #6b7280);
+  white-space: nowrap;
+  padding-top: 2px;
+}
+
+/* Filters ------------------------------------------------------------------- */
+
+.risk-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  margin-bottom: 20px;
+}
+
+.risk-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.risk-filter__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ui-text-secondary, #6b7280);
+}
+
+.risk-filter__control {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 8px;
+  border: 1px solid var(--ui-border, #e5e7eb);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ui-text, #111827);
+  min-width: 140px;
+}
+
+.risk-filter__control:focus-visible {
+  outline: 2px solid var(--ui-focus, #2563eb);
+  outline-offset: 1px;
+}
+
+/* Loading skeletons ---------------------------------------------------------- */
+
+.risk-skeleton {
+  background: var(--ui-bg-muted, #eef0f2);
+  border-radius: 6px;
+  animation: risk-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes risk-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.risk-skeleton--kpi {
+  height: 96px;
+}
+
+.risk-skeleton--bar {
+  height: 12px;
+  margin: 6px 0 18px;
+}
+
+.risk-skeleton--table {
+  height: 220px;
+}
+
+.risk-skeleton--line {
+  height: 14px;
+  margin: 8px 0;
+  width: 100%;
+}
+
+/* Responsive ----------------------------------------------------------------- */
+
+@media (max-width: 1200px) {
+  .risk-kpi-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .risk-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .risk-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

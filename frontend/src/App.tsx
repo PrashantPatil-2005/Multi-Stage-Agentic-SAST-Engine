@@ -4,9 +4,14 @@ import { Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { ApprovalsPage } from "./pages/ApprovalsPage";
+import { BenchmarkPage } from "./pages/BenchmarkPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { FindingDetailPage } from "./pages/FindingDetailPage";
 import { FindingsPage } from "./pages/FindingsPage";
+import { ProofPage } from "./pages/ProofPage";
+import { RepositoriesPage } from "./pages/RepositoriesPage";
+import { RiskPage } from "./pages/RiskPage";
+import { ValidationPage } from "./pages/ValidationPage";
 import { ROUTES, PlaceholderPage } from "./pages/PlaceholderPage";
 import "./styles/shell.css";
 
@@ -82,7 +87,21 @@ export default function App() {
             <Route path="/findings" element={<FindingsPage />} />
             <Route path="/findings/:id" element={<FindingDetailPage />} />
             <Route path="/approvals" element={<ApprovalsPage />} />
-            {ROUTES.filter((r) => r.path !== "/findings" && r.path !== "/approvals").map((r) => (
+            <Route path="/risk" element={<RiskPage />} />
+            <Route path="/validation" element={<ValidationPage />} />
+            <Route path="/proof" element={<ProofPage />} />
+            <Route path="/benchmarks" element={<BenchmarkPage />} />
+            <Route path="/repositories" element={<RepositoriesPage />} />
+            {ROUTES.filter(
+              (r) =>
+                r.path !== "/findings" &&
+                r.path !== "/approvals" &&
+                r.path !== "/risk" &&
+                r.path !== "/validation" &&
+                r.path !== "/proof" &&
+                r.path !== "/benchmarks" &&
+                r.path !== "/repositories",
+            ).map((r) => (
               <Route
                 key={r.path}
                 path={r.path}

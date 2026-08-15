@@ -95,6 +95,11 @@ def get_report(benchmark_id: str) -> BenchmarkReport | None:
     return _REPORTS.get(benchmark_id)
 
 
+def list_reports() -> list[BenchmarkReport]:
+    """Read-only accessor: all stored reports, newest first."""
+    return sorted(_REPORTS.values(), key=lambda r: r.created_at, reverse=True)
+
+
 def clear_reports() -> None:
     _REPORTS.clear()
 

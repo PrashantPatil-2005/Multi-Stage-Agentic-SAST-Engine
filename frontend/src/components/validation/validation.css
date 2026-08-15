@@ -1,0 +1,226 @@
+/* Validation page styles - enterprise security operations UI, restrained
+   visual language matching the dashboard and risk pages. */
+
+.val-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.val-kpi-grid .dash-kpi-card {
+  min-width: 0;
+}
+
+.val-section {
+  margin-bottom: 20px;
+}
+
+.val-empty-text {
+  color: var(--ui-text-secondary, #6b7280);
+  font-size: 14px;
+  margin: 4px 0;
+}
+
+/* Filters ------------------------------------------------------------------ */
+
+.val-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  margin-bottom: 20px;
+}
+
+.val-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.val-filter--search {
+  flex: 1;
+  min-width: 220px;
+}
+
+.val-filter__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ui-text-secondary, #6b7280);
+}
+
+.val-filter__control {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 8px;
+  border: 1px solid var(--ui-border, #e5e7eb);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ui-text, #111827);
+  min-width: 140px;
+}
+
+.val-filter__control:focus-visible {
+  outline: 2px solid var(--ui-focus, #2563eb);
+  outline-offset: 1px;
+}
+
+/* Table -------------------------------------------------------------------- */
+
+.val-table-scroll {
+  overflow-x: auto;
+}
+
+.val-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.val-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--ui-text-secondary, #6b7280);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--ui-border, #e5e7eb);
+  white-space: nowrap;
+}
+
+.val-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--ui-border-subtle, #f3f4f6);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.val-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.val-table__row {
+  cursor: pointer;
+}
+
+.val-table__row:hover {
+  background: var(--ui-bg-muted, #f9fafb);
+}
+
+.val-table__row:focus-visible {
+  outline: 2px solid var(--ui-focus, #2563eb);
+  outline-offset: -2px;
+}
+
+.val-table__link {
+  color: var(--ui-link, #2563eb);
+  text-decoration: none;
+  font-weight: 500;
+  font-family: var(--ui-font-mono, ui-monospace, monospace);
+}
+
+.val-table__link:hover {
+  text-decoration: underline;
+}
+
+.val-table__mono {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Reasoning expander -------------------------------------------------------- */
+
+.val-reason__summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ui-link, #2563eb);
+}
+
+.val-reason__panel {
+  white-space: normal;
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--ui-bg-muted, #f3f4f6);
+  border: 1px solid var(--ui-border, #e5e7eb);
+  border-radius: 6px;
+  min-width: 320px;
+}
+
+.val-reason__text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ui-text, #111827);
+  white-space: normal;
+}
+
+.val-reason__empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ui-text-secondary, #6b7280);
+  white-space: normal;
+}
+
+.val-reason__subtitle {
+  margin: 10px 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ui-text-secondary, #6b7280);
+}
+
+.val-reason__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.val-reason__item {
+  font-size: 12px;
+  background: #fff;
+  border: 1px solid var(--ui-border, #e5e7eb);
+  border-radius: 4px;
+  padding: 2px 8px;
+  color: var(--ui-text, #111827);
+  font-family: var(--ui-font-mono, ui-monospace, monospace);
+}
+
+/* Loading skeletons ---------------------------------------------------------- */
+
+.val-skeleton {
+  background: var(--ui-bg-muted, #eef0f2);
+  border-radius: 6px;
+  animation: val-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes val-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.val-skeleton--kpi {
+  height: 96px;
+}
+
+.val-skeleton--table {
+  height: 240px;
+}
+
+/* Responsive ----------------------------------------------------------------- */
+
+@media (max-width: 1200px) {
+  .val-kpi-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .val-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

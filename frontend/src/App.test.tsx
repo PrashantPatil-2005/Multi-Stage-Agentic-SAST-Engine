@@ -37,6 +37,59 @@ const EMPTY_SUMMARY = {
   recent_activity: [],
 };
 
+const EMPTY_RISK = {
+  has_findings: false,
+  kpis: {
+    total_assessments: { available: false, value: 0 },
+    critical_p0: { available: false, value: 0 },
+    high_p1: { available: false, value: 0 },
+    active_slas: { available: false, value: 0 },
+    sla_breaches: { available: false, value: 0 },
+    escalations: { available: false, value: 0 },
+  },
+  priority_distribution: [],
+  risk_distribution: [],
+  highest_risk_findings: [],
+  sla_overview: { available: false, active: 0, breached: 0, resolved: 0, no_sla: 0 },
+  active_slas: [],
+  breaches: [],
+  escalations: [],
+};
+
+const EMPTY_VALIDATION = {
+  has_findings: false,
+  kpis: {
+    total_validations: { available: false, value: 0 },
+    true_positives: { available: false, value: 0 },
+    false_positives: { available: false, value: 0 },
+    uncertain: { available: false, value: 0 },
+    pending: { available: false, value: 0 },
+  },
+  records: [],
+};
+
+const EMPTY_PROOF = {
+  has_findings: false,
+  kpis: {
+    total: { available: false, value: 0 },
+    verified: { available: false, value: 0 },
+    not_verified: { available: false, value: 0 },
+    blocked: { available: false, value: 0 },
+    errors: { available: false, value: 0 },
+  },
+  records: [],
+};
+
+const EMPTY_BENCHMARK = {
+  has_reports: false,
+  reports: [],
+};
+
+const EMPTY_REPOSITORIES = {
+  has_repositories: false,
+  repositories: [],
+};
+
 beforeAll(() => {
   vi.stubGlobal(
     "fetch",
@@ -45,6 +98,11 @@ beforeAll(() => {
       if (url.includes("/api/projects")) return { ok: true, status: 200, json: async () => [] };
       if (url.includes("/api/findings")) return { ok: true, status: 200, json: async () => [] };
       if (url.includes("/api/approvals")) return { ok: true, status: 200, json: async () => [] };
+      if (url.includes("/api/risk")) return { ok: true, status: 200, json: async () => EMPTY_RISK };
+      if (url.includes("/api/validation")) return { ok: true, status: 200, json: async () => EMPTY_VALIDATION };
+      if (url.includes("/api/proof")) return { ok: true, status: 200, json: async () => EMPTY_PROOF };
+      if (url.includes("/api/benchmarks")) return { ok: true, status: 200, json: async () => EMPTY_BENCHMARK };
+      if (url.includes("/api/repositories")) return { ok: true, status: 200, json: async () => EMPTY_REPOSITORIES };
       return { ok: true, status: 200, json: async () => EMPTY_SUMMARY };
     }),
   );
@@ -123,8 +181,12 @@ describe("application shell", () => {
     expect(mainHeading("Security Findings")).toBeInTheDocument();
 
     await user.click(screen.getByRole("link", { name: "Benchmarks" }));
-    expect(mainHeading("Benchmarks")).toBeInTheDocument();
-    expect(screen.getByText(/coming in Phase 5/i)).toBeInTheDocument();
+    expect(mainHeading("Security Benchmark")).toBeInTheDocument();
+    expect(screen.getByText("No benchmark results")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("link", { name: "Repositories" }));
+    expect(mainHeading("Repositories")).toBeInTheDocument();
+    expect(screen.getByText("No repositories yet")).toBeInTheDocument();
   });
 
   it("marks the active route in the sidebar", async () => {

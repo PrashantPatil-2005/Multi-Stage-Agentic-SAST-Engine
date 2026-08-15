@@ -1,0 +1,232 @@
+/* Proof page styles - enterprise security operations UI, restrained
+   visual language matching the dashboard, risk and validation pages. */
+
+.pf-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.pf-kpi-grid .dash-kpi-card {
+  min-width: 0;
+}
+
+.pf-section {
+  margin-bottom: 20px;
+}
+
+.pf-empty-text {
+  color: var(--ui-text-secondary, #6b7280);
+  font-size: 14px;
+  margin: 4px 0;
+}
+
+/* Filters ------------------------------------------------------------------ */
+
+.pf-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  margin-bottom: 20px;
+}
+
+.pf-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pf-filter--search {
+  flex: 1;
+  min-width: 220px;
+}
+
+.pf-filter__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ui-text-secondary, #6b7280);
+}
+
+.pf-filter__control {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 8px;
+  border: 1px solid var(--ui-border, #e5e7eb);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ui-text, #111827);
+  min-width: 140px;
+}
+
+.pf-filter__control:focus-visible {
+  outline: 2px solid var(--ui-focus, #2563eb);
+  outline-offset: 1px;
+}
+
+/* Table -------------------------------------------------------------------- */
+
+.pf-table-scroll {
+  overflow-x: auto;
+}
+
+.pf-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.pf-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--ui-text-secondary, #6b7280);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--ui-border, #e5e7eb);
+  white-space: nowrap;
+}
+
+.pf-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--ui-border-subtle, #f3f4f6);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.pf-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.pf-table__row {
+  cursor: pointer;
+}
+
+.pf-table__row:hover {
+  background: var(--ui-bg-muted, #f9fafb);
+}
+
+.pf-table__row:focus-visible {
+  outline: 2px solid var(--ui-focus, #2563eb);
+  outline-offset: -2px;
+}
+
+.pf-table__link {
+  color: var(--ui-link, #2563eb);
+  text-decoration: none;
+  font-weight: 500;
+  font-family: var(--ui-font-mono, ui-monospace, monospace);
+}
+
+.pf-table__link:hover {
+  text-decoration: underline;
+}
+
+.pf-table__mono {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Summary expander ---------------------------------------------------------- */
+
+.pf-summary__summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ui-link, #2563eb);
+}
+
+.pf-summary__panel {
+  white-space: normal;
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--ui-bg-muted, #f3f4f6);
+  border: 1px solid var(--ui-border, #e5e7eb);
+  border-radius: 6px;
+  min-width: 320px;
+}
+
+.pf-summary__text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ui-text, #111827);
+  white-space: normal;
+}
+
+.pf-summary__empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ui-text-secondary, #6b7280);
+  white-space: normal;
+}
+
+.pf-summary__error {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--ui-text-danger, #b91c1c);
+  white-space: normal;
+}
+
+.pf-summary__subtitle {
+  margin: 10px 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ui-text-secondary, #6b7280);
+}
+
+.pf-policy {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 16px;
+  font-size: 12px;
+}
+
+.pf-policy__row dt {
+  color: var(--ui-text-secondary, #6b7280);
+}
+
+.pf-policy__row dd {
+  margin: 0;
+  color: var(--ui-text, #111827);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Loading skeletons ---------------------------------------------------------- */
+
+.pf-skeleton {
+  background: var(--ui-bg-muted, #eef0f2);
+  border-radius: 6px;
+  animation: pf-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pf-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.pf-skeleton--kpi {
+  height: 96px;
+}
+
+.pf-skeleton--table {
+  height: 240px;
+}
+
+/* Responsive ----------------------------------------------------------------- */
+
+@media (max-width: 1200px) {
+  .pf-kpi-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .pf-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
