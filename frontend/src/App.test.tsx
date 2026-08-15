@@ -44,6 +44,7 @@ beforeAll(() => {
       const url = String(input);
       if (url.includes("/api/projects")) return { ok: true, status: 200, json: async () => [] };
       if (url.includes("/api/findings")) return { ok: true, status: 200, json: async () => [] };
+      if (url.includes("/api/approvals")) return { ok: true, status: 200, json: async () => [] };
       return { ok: true, status: 200, json: async () => EMPTY_SUMMARY };
     }),
   );

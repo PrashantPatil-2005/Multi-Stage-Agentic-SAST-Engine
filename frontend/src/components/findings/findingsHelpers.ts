@@ -75,7 +75,21 @@ export function formatConfidence(confidence: number | null): string {
 }
 
 export function deriveDisplayStatus(finding: FindingListItem): DisplayStatus {
-  switch (finding.approval_status) {
+  return deriveDisplayStatusCore(
+    finding.approval_status,
+    finding.proof_status,
+    finding.verdict,
+  );
+}
+
+/** Single source of truth for the derived display status (Phase 3 mapping).
+    Also used by the finding detail page so both views stay identical. */
+export function deriveDisplayStatusCore(
+  approvalStatus: string | null | undefined,
+  proofStatus: string | null | undefined,
+  verdict: string | null | undefined,
+): DisplayStatus {
+  switch (approvalStatus) {
     case "approved":
       return "Approved";
     case "rejected":
@@ -86,11 +100,11 @@ export function deriveDisplayStatus(finding: FindingListItem): DisplayStatus {
     default:
       break;
   }
-  if (finding.proof_status === "verified") return "Proven";
-  if (finding.verdict === "true_positive" || finding.verdict === "false_positive") {
+  if (proofStatus === "verified") return "Proven";
+  if (verdict === "true_positive" || verdict === "false_positive") {
     return "Validated";
   }
-  if (finding.verdict === "uncertain") return "Uncertain";
+  if (verdict === "uncertain") return "Uncertain";
   return "Detected";
 }
 

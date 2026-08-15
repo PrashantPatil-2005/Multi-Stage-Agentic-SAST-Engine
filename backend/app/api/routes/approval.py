@@ -5,6 +5,8 @@ GET  /api/findings/{finding_id}/approval       - latest request for a finding
 POST /api/approvals/{approval_id}/approve      - approve (terminal)
 POST /api/approvals/{approval_id}/reject       - reject (terminal)
 POST /api/approvals/{approval_id}/request-changes - return to review cycle
+POST /api/approvals/{approval_id}/resubmit     - changes_requested -> pending
+GET  /api/approvals                            - read-only review queue
 GET  /api/approvals/{approval_id}/history      - audit event trail
 
 Errors: 404 (missing finding/approval), 409 (gate failure or invalid
@@ -14,6 +16,7 @@ transition), 422 (invalid request body, incl. naive datetimes).
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, field_validator
 
+from app.api.approval_models import ApprovalListItem
 from app.approval.models import ApprovalAction, ApprovalEvent, ApprovalRequest
 from app.approval.service import (
     ApprovalGateError,
@@ -21,9 +24,18 @@ from app.approval.service import (
     InvalidTransitionError,
 )
 from app.approval.store import get_approval_store
+from app.dedup.service import repo_label_for_file
+from app.risk.service import all_risk_assessments
 from app.validate.store import get_finding_store
 
 router = APIRouter(tags=["approval"])
+
+_STATUS_RANK = {
+    "pending": 0,
+    "changes_requested": 1,
+    "approved": 2,
+    "rejected": 3,
+}
 
 
 class ApprovalRequestIn(BaseModel):
@@ -131,6 +143,52 @@ def request_changes(
 def resubmit(approval_id: str, body: ApprovalDecisionIn) -> ApprovalRequest:
     """changes_requested -> pending (new review cycle, version + 1)."""
     return _transition(approval_id, body, "resubmit")
+
+
+@router.get(
+    "/approvals", response_model=list[ApprovalListItem]
+)
+def list_approvals() -> list[ApprovalListItem]:
+    """Read-only review queue: every approval request with finding and
+    risk context, pending first then newest request first. Never mutates
+    approval state."""
+    findings = {f.id: f for f in get_finding_store().all()}
+    risks = {r.finding_id: r for r in all_risk_assessments()}
+    items: list[ApprovalListItem] = []
+    for request in get_approval_store().all():
+        finding = findings.get(request.finding_id)
+        assessment = risks.get(request.finding_id)
+        items.append(
+            ApprovalListItem(
+                approval_id=request.id,
+                finding_id=request.finding_id,
+                status=request.status,
+                action=request.action,
+                version=request.version,
+                requested_by=request.requested_by,
+                requested_at=request.requested_at,
+                reviewed_by=request.reviewed_by,
+                reviewed_at=request.reviewed_at,
+                reason=request.reason,
+                vulnerability_type=(
+                    finding.vulnerability_type if finding else None
+                ),
+                severity=finding.severity if finding else None,
+                priority=assessment.priority if assessment else None,
+                risk_score=assessment.risk_score if assessment else None,
+                repository=(
+                    repo_label_for_file(finding.source.file) if finding else None
+                ),
+                file=finding.source.file if finding else None,
+            )
+        )
+    items.sort(
+        key=lambda item: (
+            _STATUS_RANK.get(item.status, 9),
+            -item.requested_at.timestamp(),
+        )
+    )
+    return items
 
 
 @router.get(

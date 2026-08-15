@@ -3,6 +3,7 @@ import { Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
+import { ApprovalsPage } from "./pages/ApprovalsPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { FindingDetailPage } from "./pages/FindingDetailPage";
 import { FindingsPage } from "./pages/FindingsPage";
@@ -80,7 +81,8 @@ export default function App() {
           <Routes>
             <Route path="/findings" element={<FindingsPage />} />
             <Route path="/findings/:id" element={<FindingDetailPage />} />
-            {ROUTES.filter((r) => r.path !== "/findings").map((r) => (
+            <Route path="/approvals" element={<ApprovalsPage />} />
+            {ROUTES.filter((r) => r.path !== "/findings" && r.path !== "/approvals").map((r) => (
               <Route
                 key={r.path}
                 path={r.path}
