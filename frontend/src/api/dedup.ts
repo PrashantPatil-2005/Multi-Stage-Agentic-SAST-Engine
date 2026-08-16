@@ -25,10 +25,17 @@ export interface DeduplicationResult {
 
 export function deduplicateFindings(
   findingIds: string[],
+  scanRunId?: string,
 ): Promise<DeduplicationResult> {
+  /* Optional scan_run_id (Phase 14J): when present the backend validates the
+     run's explicit lineage and records the DEDUPLICATE stage execution. */
+  const payload: { finding_ids: string[]; scan_run_id?: string } = {
+    finding_ids: findingIds,
+  };
+  if (scanRunId) payload.scan_run_id = scanRunId;
   return requestJson<DeduplicationResult>("/api/deduplicate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ finding_ids: findingIds }),
+    body: JSON.stringify(payload),
   });
 }

@@ -42,9 +42,15 @@ function toApprovalListItem(
 export function ApprovalPanel({
   detail,
   onApprovalChanged,
+  runContextId = null,
+  disabled = false,
 }: {
   detail: FindingDetail;
   onApprovalChanged: () => void;
+  /** Explicit scan-run context for the approval request (Phase 14K). */
+  runContextId?: string | null;
+  /** Disable the request action until a scan-run context is selected. */
+  disabled?: boolean;
 }) {
   const approval = detail.approval;
   const review = useApprovalReview(
@@ -54,7 +60,12 @@ export function ApprovalPanel({
   const [activeKind, setActiveKind] = useState<DecisionKind | null>(null);
 
   async function handleRequestApproval() {
-    if (await request.requestApproval(detail.finding_id)) {
+    if (
+      await request.requestApproval(
+        detail.finding_id,
+        runContextId ?? undefined,
+      )
+    ) {
       onApprovalChanged();
     }
   }
@@ -106,7 +117,7 @@ export function ApprovalPanel({
               <div className="fd-panel__actions">
                 <Button
                   variant="secondary"
-                  disabled={request.requesting}
+                  disabled={request.requesting || disabled}
                   onClick={handleRequestApproval}
                 >
                   {request.requesting

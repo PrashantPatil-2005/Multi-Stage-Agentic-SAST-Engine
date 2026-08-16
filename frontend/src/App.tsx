@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { Route, Routes, useLocation } from "react-router-dom";
 
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
@@ -8,10 +8,12 @@ import { BenchmarkPage } from "./pages/BenchmarkPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { FindingDetailPage } from "./pages/FindingDetailPage";
 import { FindingsPage } from "./pages/FindingsPage";
+import { NotFoundPage } from "./pages/NotFoundPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { ProofPage } from "./pages/ProofPage";
 import { RepositoriesPage } from "./pages/RepositoriesPage";
 import { RiskPage } from "./pages/RiskPage";
+import { ScanRunPage } from "./pages/ScanRunPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { ValidationPage } from "./pages/ValidationPage";
 import "./styles/shell.css";
@@ -38,14 +40,23 @@ export default function App() {
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const location = useLocation();
-  const navigate = useNavigate();
 
   const route = useMemo(() => {
     const findingsDetail =
       location.pathname.startsWith("/findings/") &&
       location.pathname !== "/findings";
     if (findingsDetail) return PAGES.find((p) => p.path === "/findings")!;
-    return PAGES.find((p) => p.path === location.pathname) ?? PAGES[0];
+    const scanRunDetail =
+      location.pathname.startsWith("/scans/") && location.pathname !== "/scans";
+    if (scanRunDetail) {
+      return { path: "/scans/:scanRunId", title: "Scan Run" };
+    }
+    return (
+      PAGES.find((p) => p.path === location.pathname) ?? {
+        path: "*",
+        title: "Page not found",
+      }
+    );
   }, [location.pathname]);
 
   /* close the drawer when the route changes (mobile) */
@@ -64,16 +75,6 @@ export default function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [drawerOpen]);
-
-  /* unknown routes land on the dashboard */
-  useEffect(() => {
-    const findingsDetail =
-      location.pathname.startsWith("/findings/") &&
-      location.pathname !== "/findings";
-    if (!findingsDetail && !PAGES.some((p) => p.path === location.pathname)) {
-      navigate("/dashboard", { replace: true });
-    }
-  }, [location.pathname, navigate]);
 
   return (
     <div className="shell">
@@ -104,6 +105,7 @@ export default function App() {
             <Route path="/findings" element={<FindingsPage />} />
             <Route path="/findings/:id" element={<FindingDetailPage />} />
             <Route path="/repositories" element={<RepositoriesPage />} />
+            <Route path="/scans/:scanRunId" element={<ScanRunPage />} />
             <Route path="/risk" element={<RiskPage />} />
             <Route path="/validation" element={<ValidationPage />} />
             <Route path="/proof" element={<ProofPage />} />
@@ -111,6 +113,7 @@ export default function App() {
             <Route path="/benchmarks" element={<BenchmarkPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/profile" element={<ProfilePage />} />
+            <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </main>
       </div>

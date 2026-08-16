@@ -3,6 +3,7 @@
    (GET /api/findings/{finding_id}). Read-only: nothing here mutates state. */
 
 import type { ApprovalRequest } from "./approvals";
+import type { ScanRun } from "./scans";
 
 export interface FindingDetailSource {
   file: string;
@@ -100,6 +101,15 @@ export interface FindingDedupDetail {
   related_finding_ids: string[];
 }
 
+/** Authoritative repository that owns a finding (from backend lineage). */
+export interface FindingProject {
+  project_id: string;
+  name: string;
+  source_type: string;
+  location: string;
+  language: string;
+}
+
 export interface FindingDetail {
   finding_id: string;
   vulnerability_type: string;
@@ -116,6 +126,9 @@ export interface FindingDetail {
   proof: FindingProofDetail | null;
   approval: ApprovalRequest | null;
   dedup: FindingDedupDetail | null;
+  /** Owning project + every producing scan run (explicit lineage). */
+  project?: FindingProject | null;
+  scan_runs?: ScanRun[];
 }
 
 export class FindingApiError extends Error {

@@ -31,6 +31,9 @@ function MetaItem({
 
 export function FindingHeader({ detail }: { detail: FindingDetail }) {
   const status = deriveDetailStatus(detail);
+  const projectName = detail.project?.name ?? null;
+  const projectId = detail.project?.project_id ?? null;
+  const repositoryLabel = projectName ?? detail.repository;
 
   return (
     <header className="fd-header">
@@ -59,7 +62,19 @@ export function FindingHeader({ detail }: { detail: FindingDetail }) {
       </p>
 
       <dl className="fd-meta">
-        <MetaItem label="Repository" value={detail.repository} />
+        {projectId !== null ? (
+          <div className="fd-meta__item">
+            <span className="fd-meta__label">Repository</span>
+            <Link
+              className="fd-meta__value fd-panel__link"
+              to={`/repositories?project_id=${encodeURIComponent(projectId)}`}
+            >
+              {repositoryLabel}
+            </Link>
+          </div>
+        ) : (
+          <MetaItem label="Repository" value={repositoryLabel} />
+        )}
         <MetaItem label="File" value={detail.source.file} mono />
         <MetaItem label="Source" value={detail.source.snippet} mono />
         <MetaItem label="Sink" value={detail.sink.snippet} mono />

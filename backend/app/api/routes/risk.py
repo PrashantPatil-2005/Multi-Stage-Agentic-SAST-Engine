@@ -32,6 +32,12 @@ from app.risk.service import (
     record_risk_assessment,
     record_sla_record,
 )
+from app.scan.run_models import STAGE_RISK, STAGE_SLA
+from app.scan.run_service import (
+    StageContextError,
+    record_stage_execution,
+    validate_stage_context,
+)
 from app.validate.store import get_finding_store, get_validation_store
 
 router = APIRouter(prefix="/findings", tags=["risk"])
@@ -73,8 +79,20 @@ def _parse_time(value: datetime | None, what: str) -> datetime | None:
     return value
 
 
+class RiskStageRequest(BaseModel):
+    """Optional scan-run context for one per-finding stage action.
+
+    When present the action is recorded as an explicit execution of the
+    RISK/SLA stage against that run (Phase 14J). Clients that omit it are
+    unchanged: the action still runs, with no stage record.
+    """
+
+    scan_run_id: str | None = None
+
+
 class SlaCheckRequest(BaseModel):
     now: datetime | None = None
+    scan_run_id: str | None = None
 
     @field_validator("now")
     @classmethod
@@ -100,8 +118,7 @@ class SlaCheckResult(BaseModel):
     escalation: EscalationEvent | None
 
 
-@router.post("/{finding_id}/risk", response_model=RiskAssessment)
-def assess_risk(finding_id: str) -> RiskAssessment:
+def _assess_risk(finding_id: str) -> RiskAssessment:
     finding = _require_finding(finding_id)
     validation = get_validation_store().get(finding_id)
     proof = get_proof_store().get(finding_id)
@@ -110,13 +127,31 @@ def assess_risk(finding_id: str) -> RiskAssessment:
     return assessment
 
 
+def _require_stage_context(scan_run_id: str, finding_id: str) -> None:
+    try:
+        validate_stage_context(scan_run_id, finding_id)
+    except StageContextError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+
+@router.post("/{finding_id}/risk", response_model=RiskAssessment)
+def assess_risk(
+    finding_id: str, body: RiskStageRequest | None = None
+) -> RiskAssessment:
+    if body is not None and body.scan_run_id is not None:
+        _require_stage_context(body.scan_run_id, finding_id)
+        return record_stage_execution(
+            body.scan_run_id, STAGE_RISK, lambda: _assess_risk(finding_id)
+        )
+    return _assess_risk(finding_id)
+
+
 @router.get("/{finding_id}/risk", response_model=RiskAssessment)
 def get_risk(finding_id: str) -> RiskAssessment:
     return _require_risk(finding_id)
 
 
-@router.post("/{finding_id}/sla", response_model=SLARecord)
-def create_sla(finding_id: str) -> SLARecord:
+def _start_sla(finding_id: str) -> SLARecord:
     assessment = _require_risk(finding_id)
     existing = get_sla_record(finding_id)
     if existing is not None and existing.priority == assessment.priority:
@@ -126,13 +161,24 @@ def create_sla(finding_id: str) -> SLARecord:
     return record
 
 
+@router.post("/{finding_id}/sla", response_model=SLARecord)
+def create_sla(
+    finding_id: str, body: RiskStageRequest | None = None
+) -> SLARecord:
+    if body is not None and body.scan_run_id is not None:
+        _require_stage_context(body.scan_run_id, finding_id)
+        return record_stage_execution(
+            body.scan_run_id, STAGE_SLA, lambda: _start_sla(finding_id)
+        )
+    return _start_sla(finding_id)
+
+
 @router.get("/{finding_id}/sla", response_model=SLARecord)
 def get_sla(finding_id: str) -> SLARecord:
     return _require_sla(finding_id)
 
 
-@router.post("/{finding_id}/sla/check", response_model=SlaCheckResult)
-def check_sla(finding_id: str, body: SlaCheckRequest | None = None) -> SlaCheckResult:
+def _check_sla(finding_id: str, body: SlaCheckRequest | None) -> SlaCheckResult:
     record = _require_sla(finding_id)
     now = _parse_time(body.now if body else None, "now")
     updated, event = SLAService().check_sla(record, now)
@@ -140,6 +186,16 @@ def check_sla(finding_id: str, body: SlaCheckRequest | None = None) -> SlaCheckR
     if event is not None:
         record_escalation_event(event)
     return SlaCheckResult(sla=updated, escalation=event)
+
+
+@router.post("/{finding_id}/sla/check", response_model=SlaCheckResult)
+def check_sla(finding_id: str, body: SlaCheckRequest | None = None) -> SlaCheckResult:
+    if body is not None and body.scan_run_id is not None:
+        _require_stage_context(body.scan_run_id, finding_id)
+        return record_stage_execution(
+            body.scan_run_id, STAGE_SLA, lambda: _check_sla(finding_id, body)
+        )
+    return _check_sla(finding_id, body)
 
 
 @router.post("/{finding_id}/sla/resolve", response_model=SLARecord)

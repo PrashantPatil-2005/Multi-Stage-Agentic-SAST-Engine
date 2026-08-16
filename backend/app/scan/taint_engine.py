@@ -48,8 +48,9 @@ class _FnSummary:
 
 
 class _FileContext:
-    def __init__(self, rule: ScanRule, code_file: SourceFile) -> None:
+    def __init__(self, rule: ScanRule, code_file: SourceFile, project_id: str) -> None:
         self.rule = rule
+        self.project_id = project_id
         self.file = code_file.path
         self.source = code_file.source
         self.findings: list[CandidateFinding] = []
@@ -107,8 +108,9 @@ def _kind(parts: list[_Taint]) -> str:
 
 
 class TaintEngine:
-    def __init__(self, rule: ScanRule) -> None:
+    def __init__(self, rule: ScanRule, project_id: str = "") -> None:
         self._rule = rule
+        self._project_id = project_id
 
     # ---------------------------------------------------------------- public
 
@@ -120,7 +122,7 @@ class TaintEngine:
             logger.debug("scan: skipping %s (parse error)", code_file.path)
             return [], []
         tree = ast.parse(code_file.source, filename=code_file.path)
-        ctx = _FileContext(self._rule, code_file)
+        ctx = _FileContext(self._rule, code_file, self._project_id)
         self._analyze_block(ctx, tree.body, tainted={}, class_stack=(), fn_stack=(), summary=None)
         return ctx.findings, ctx.summaries
 
@@ -437,7 +439,7 @@ class TaintEngine:
             ["no sanitizer observed at sink"],
         )
         finding_id = hashlib.sha256(
-            f"{self._rule.vulnerability_type}|{ctx.file}|{source_ref.line}|{sink.line}".encode()
+            f"{ctx.project_id}|{self._rule.vulnerability_type}|{ctx.file}|{source_ref.line}|{sink.line}".encode()
         ).hexdigest()
         finding = CandidateFinding(
             id=finding_id,

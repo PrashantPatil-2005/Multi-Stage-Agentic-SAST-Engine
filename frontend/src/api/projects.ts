@@ -61,6 +61,7 @@ export interface ProjectDetail {
 
 export interface ScanResponse {
   report_id: string;
+  scan_run_id: string;
   project_id: string;
   created_at: string;
   scanned_file_count: number;
@@ -134,4 +135,16 @@ export function getProjectDetail(projectId: string): Promise<ProjectDetail> {
     `/api/projects/${encodeURIComponent(projectId)}`,
     { method: "GET" },
   );
+}
+
+export async function deleteProject(projectId: string): Promise<void> {
+  const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    throw new ProjectRequestError(
+      await errorDetail(response, `/api/projects/${projectId}`),
+      response.status,
+    );
+  }
 }

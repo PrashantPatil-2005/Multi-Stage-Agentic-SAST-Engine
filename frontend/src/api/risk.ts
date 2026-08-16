@@ -138,23 +138,45 @@ export interface SlaCheckResultOutput {
   escalation: EscalationEventOutput | null;
 }
 
-export function assessRisk(findingId: string): Promise<RiskAssessmentOutput> {
-  return requestJson<RiskAssessmentOutput>(
+function stagePost(url: string, scanRunId?: string): Promise<unknown> {
+  /* Per-finding stage actions accept an optional scan_run_id context (Phase
+     14J): the backend records the action as an explicit execution of that
+     stage against the run. Clients that omit it send no body at all - the
+     wire contract is unchanged for existing callers. */
+  const options: RequestInit = { method: "POST" };
+  if (scanRunId) {
+    options.headers = { "Content-Type": "application/json" };
+    options.body = JSON.stringify({ scan_run_id: scanRunId });
+  }
+  return requestJson(url, options);
+}
+
+export function assessRisk(
+  findingId: string,
+  scanRunId?: string,
+): Promise<RiskAssessmentOutput> {
+  return stagePost(
     `/api/findings/${encodeURIComponent(findingId)}/risk`,
-    { method: "POST" },
-  );
+    scanRunId,
+  ) as Promise<RiskAssessmentOutput>;
 }
 
-export function createSla(findingId: string): Promise<SlaRecordOutput> {
-  return requestJson<SlaRecordOutput>(
+export function createSla(
+  findingId: string,
+  scanRunId?: string,
+): Promise<SlaRecordOutput> {
+  return stagePost(
     `/api/findings/${encodeURIComponent(findingId)}/sla`,
-    { method: "POST" },
-  );
+    scanRunId,
+  ) as Promise<SlaRecordOutput>;
 }
 
-export function checkSla(findingId: string): Promise<SlaCheckResultOutput> {
-  return requestJson<SlaCheckResultOutput>(
+export function checkSla(
+  findingId: string,
+  scanRunId?: string,
+): Promise<SlaCheckResultOutput> {
+  return stagePost(
     `/api/findings/${encodeURIComponent(findingId)}/sla/check`,
-    { method: "POST" },
-  );
+    scanRunId,
+  ) as Promise<SlaCheckResultOutput>;
 }

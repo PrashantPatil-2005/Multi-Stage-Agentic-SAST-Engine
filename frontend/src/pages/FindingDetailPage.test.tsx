@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ApprovalEvent, ApprovalRequest } from "../api/approvals";
 import type { FindingDetail } from "../api/findingDetail";
+import type { ScanRun } from "../api/scans";
 import { FindingDetailPage } from "./FindingDetailPage";
 
 function detail(overrides: Partial<FindingDetail>): FindingDetail {
@@ -815,6 +816,20 @@ describe("finding detail page", () => {
     ).toBeInTheDocument();
   });
 
+  it("explains that proof shows a safe summary, not raw artifacts", async () => {
+    mockDetail(detail({}));
+    renderPage();
+    await loaded();
+    const section = panel("Proof");
+    expect(
+      within(section).getByText(
+        /Raw payloads, artifacts and sandbox internals are intentionally not exposed/,
+      ),
+    ).toBeInTheDocument();
+    expect(within(section).queryByText(/DROP TABLE users/)).not.toBeInTheDocument();
+    expect(within(section).queryByText("temporary_directory")).not.toBeInTheDocument();
+  });
+
   it("renders the approval state", async () => {
     mockDetail(detail({}));
     renderPage();
@@ -1004,6 +1019,623 @@ describe("finding detail page", () => {
         ["/api/approvals/ap-1/history", "GET"],
       ]),
     );
+  });
+});
+
+describe("finding lineage (repository and scan runs)", () => {
+  const PROJECT = {
+    project_id: "aaaa0000aaaa0000aaaa0000aaaa0000",
+    name: "web-app",
+    source_type: "git",
+    location: "https://github.com/example/web-app",
+    language: "python",
+  };
+
+  const RUN_1: ScanRun = {
+    scan_run_id: "scan-run-0001",
+    project_id: PROJECT.project_id,
+    status: "completed",
+    started_at: "2026-08-16T07:10:00Z",
+    completed_at: "2026-08-16T07:10:05Z",
+    scanned_file_count: 127,
+    total_findings: 3,
+    error: null,
+    created_at: "2026-08-16T07:10:00Z",
+  };
+
+  const RUN_2: ScanRun = {
+    scan_run_id: "scan-run-0002",
+    project_id: PROJECT.project_id,
+    status: "completed",
+    started_at: "2026-08-16T08:20:00Z",
+    completed_at: "2026-08-16T08:20:04Z",
+    scanned_file_count: 127,
+    total_findings: 3,
+    error: null,
+    created_at: "2026-08-16T08:20:00Z",
+  };
+
+  function lineageSection() {
+    return panel("Repository & Scan Lineage");
+  }
+
+  it("displays the owning repository from the authoritative backend lineage", async () => {
+    mockDetail(detail({ project: PROJECT, scan_runs: [RUN_1] }));
+    renderPage();
+    await loaded();
+    const section = lineageSection();
+    expect(within(section).getByText("web-app")).toBeInTheDocument();
+    expect(within(section).getByText("python")).toBeInTheDocument();
+    expect(within(section).getByText("git")).toBeInTheDocument();
+    expect(
+      within(section).getByRole("link", { name: "Open Repository" }),
+    ).toHaveAttribute(
+      "href",
+      `/repositories?project_id=${PROJECT.project_id}`,
+    );
+  });
+
+  it("links the header repository to the real project id", async () => {
+    mockDetail(detail({ project: PROJECT, scan_runs: [] }));
+    renderPage();
+    await loaded();
+    const repositoryLink = within(header()).getByRole("link", {
+      name: "web-app",
+    });
+    expect(repositoryLink).toHaveAttribute(
+      "href",
+      `/repositories?project_id=${PROJECT.project_id}`,
+    );
+  });
+
+  it("lists every producing scan run with a link to the real run id", async () => {
+    mockDetail(detail({ project: PROJECT, scan_runs: [RUN_2, RUN_1] }));
+    renderPage();
+    await loaded();
+    const section = lineageSection();
+    const runLinks = within(section).getAllByRole("link", {
+      name: /Scan run scan-run-/,
+    });
+    expect(runLinks).toHaveLength(2);
+    expect(runLinks[0]).toHaveAttribute("href", "/scans/scan-run-0002");
+    expect(runLinks[1]).toHaveAttribute("href", "/scans/scan-run-0001");
+    expect(within(section).getAllByText("completed")).toHaveLength(2);
+  });
+
+  it("shows honest lineage-unavailable states when lineage is missing", async () => {
+    mockDetail(detail({ project: null, scan_runs: [] }));
+    renderPage();
+    await loaded();
+    const section = lineageSection();
+    expect(
+      within(section).getByText("Repository lineage unavailable."),
+    ).toBeInTheDocument();
+    expect(
+      within(section).getByText("Scan lineage unavailable."),
+    ).toBeInTheDocument();
+    expect(
+      within(section).queryByRole("link", { name: "Open Repository" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("never derives repository or scan links from paths or timestamps", async () => {
+    mockDetail(detail({ project: PROJECT, scan_runs: [RUN_1] }));
+    renderPage();
+    await loaded();
+    const section = lineageSection();
+    const links = within(section).getAllByRole("link");
+    for (const link of links) {
+      const href = link.getAttribute("href") ?? "";
+      if (href.startsWith("/scans/")) {
+        expect(href).toBe("/scans/scan-run-0001");
+      }
+      if (href.startsWith("/repositories")) {
+        expect(href).toBe(
+          `/repositories?project_id=${PROJECT.project_id}`,
+        );
+      }
+    }
+    const source = readFileSync(
+      "src/components/finding-detail/LineagePanel.tsx",
+      "utf-8",
+    );
+    expect(source).not.toContain("Math.random");
+    expect(source).not.toContain("setInterval");
+    expect(source).not.toContain("child_process");
+  });
+});
+
+describe("finding run context (Phase 14J)", () => {
+  const PROJECT = {
+    project_id: "aaaa0000aaaa0000aaaa0000aaaa0000",
+    name: "web-app",
+    source_type: "git",
+    location: "https://github.com/example/web-app",
+    language: "python",
+  };
+
+  const RUN_1: ScanRun = {
+    scan_run_id: "scan-run-0001",
+    project_id: PROJECT.project_id,
+    status: "completed",
+    started_at: "2026-08-16T07:10:00Z",
+    completed_at: "2026-08-16T07:10:05Z",
+    scanned_file_count: 127,
+    total_findings: 3,
+    error: null,
+    created_at: "2026-08-16T07:10:00Z",
+  };
+
+  const RUN_2: ScanRun = {
+    scan_run_id: "scan-run-0002",
+    project_id: PROJECT.project_id,
+    status: "completed",
+    started_at: "2026-08-16T08:20:00Z",
+    completed_at: "2026-08-16T08:20:04Z",
+    scanned_file_count: 127,
+    total_findings: 3,
+    error: null,
+    created_at: "2026-08-16T08:20:00Z",
+  };
+
+  function riskPosts(onCall: ReturnType<typeof vi.fn>) {
+    return onCall.mock.calls.filter(
+      ([url, init]) =>
+        String(url) === "/api/findings/f-sql-1/risk" &&
+        (init?.method ?? "").toUpperCase() === "POST",
+    );
+  }
+
+  it("uses its only producing scan run automatically and sends its exact id", async () => {
+    const user = userEvent.setup();
+    const onCall = vi.fn<(url: string, init?: RequestInit) => void>();
+    mockRiskFlow({
+      detail: detail({ project: PROJECT, scan_runs: [RUN_1], risk: null, sla: null }),
+      afterAssess: detail({
+        project: PROJECT,
+        scan_runs: [RUN_1],
+        risk: { ...detail({}).risk!, ...RISK_OUT },
+        sla: null,
+      }),
+      onCall,
+    });
+    renderPage();
+    await loaded();
+    const context = screen.getByText("Run context");
+    expect(context.closest(".fd-runcontext")?.textContent).toContain(
+      "#scan-run",
+    );
+    await user.click(
+      within(riskSection()).getByRole("button", { name: "Assess Risk" }),
+    );
+    await within(riskSection()).findByRole("status");
+    const post = riskPosts(onCall)[0];
+    expect(post).toBeDefined();
+    expect(JSON.parse(String(post[1]?.body))).toEqual({
+      scan_run_id: RUN_1.scan_run_id,
+    });
+  });
+
+  it("requires an explicit run context when several runs produced the finding", async () => {
+    const user = userEvent.setup();
+    const onCall = vi.fn<(url: string, init?: RequestInit) => void>();
+    mockRiskFlow({
+      detail: detail({ project: PROJECT, scan_runs: [RUN_2, RUN_1], risk: null, sla: null }),
+      afterAssess: detail({
+        project: PROJECT,
+        scan_runs: [RUN_2, RUN_1],
+        risk: { ...detail({}).risk!, ...RISK_OUT },
+        sla: null,
+      }),
+      onCall,
+    });
+    renderPage();
+    await loaded();
+    const select = screen.getByLabelText("Scan run context");
+    expect(select).toHaveValue("");
+    const assess = within(riskSection()).getByRole("button", {
+      name: "Assess Risk",
+    });
+    expect(assess).toBeDisabled();
+    expect(riskPosts(onCall)).toHaveLength(0);
+
+    await user.selectOptions(select, RUN_2.scan_run_id);
+    expect(select).toHaveValue(RUN_2.scan_run_id);
+    expect(assess).toBeEnabled();
+    await user.click(assess);
+    await within(riskSection()).findByRole("status");
+    const post = riskPosts(onCall)[0];
+    expect(post).toBeDefined();
+    expect(JSON.parse(String(post[1]?.body))).toEqual({
+      scan_run_id: RUN_2.scan_run_id,
+    });
+  });
+
+  it("selects only the real backend scan-run ids from lineage", async () => {
+    mockRiskFlow({
+      detail: detail({ project: PROJECT, scan_runs: [RUN_2, RUN_1], risk: null, sla: null }),
+    });
+    renderPage();
+    await loaded();
+    const select = screen.getByLabelText("Scan run context") as HTMLSelectElement;
+    const values = Array.from(select.options).map((option) => option.value);
+    expect(values).toEqual(["", RUN_2.scan_run_id, RUN_1.scan_run_id]);
+  });
+
+  it("keeps SLA actions disabled until a run context is chosen", async () => {
+    const user = userEvent.setup();
+    mockRiskFlow({
+      detail: detail({
+        project: PROJECT,
+        scan_runs: [RUN_2, RUN_1],
+        risk: { ...detail({}).risk!, ...RISK_OUT },
+        sla: null,
+      }),
+    });
+    renderPage();
+    await loaded();
+    expect(
+      within(panel("SLA")).getByRole("button", { name: "Start SLA" }),
+    ).toBeDisabled();
+    const select = screen.getByLabelText("Scan run context");
+    await user.selectOptions(select, RUN_1.scan_run_id);
+    expect(
+      within(panel("SLA")).getByRole("button", { name: "Start SLA" }),
+    ).toBeEnabled();
+  });
+
+  it("sends no run context when the finding has no scan runs", async () => {
+    const user = userEvent.setup();
+    const onCall = vi.fn<(url: string, init?: RequestInit) => void>();
+    mockRiskFlow({
+      detail: detail({ project: PROJECT, scan_runs: [], risk: null, sla: null }),
+      afterAssess: detail({ risk: { ...detail({}).risk!, ...RISK_OUT }, sla: null }),
+      onCall,
+    });
+    renderPage();
+    await loaded();
+    expect(screen.queryByText("Run context")).not.toBeInTheDocument();
+    await user.click(
+      within(riskSection()).getByRole("button", { name: "Assess Risk" }),
+    );
+    await within(riskSection()).findByRole("status");
+    const post = riskPosts(onCall)[0];
+    expect(post).toBeDefined();
+    expect(post[1]?.body).toBeUndefined();
+  });
+});
+
+describe("finding full pipeline run context (Phase 14K)", () => {
+  const PROJECT = {
+    project_id: "aaaa0000aaaa0000aaaa0000aaaa0000",
+    name: "web-app",
+    source_type: "git",
+    location: "https://github.com/example/web-app",
+    language: "python",
+  };
+
+  const RUN_1: ScanRun = {
+    scan_run_id: "scan-run-0001",
+    project_id: PROJECT.project_id,
+    status: "completed",
+    started_at: "2026-08-16T07:10:00Z",
+    completed_at: "2026-08-16T07:10:05Z",
+    scanned_file_count: 127,
+    total_findings: 3,
+    error: null,
+    created_at: "2026-08-16T07:10:00Z",
+  };
+
+  const RUN_2: ScanRun = {
+    scan_run_id: "scan-run-0002",
+    project_id: PROJECT.project_id,
+    status: "completed",
+    started_at: "2026-08-16T08:20:00Z",
+    completed_at: "2026-08-16T08:20:04Z",
+    scanned_file_count: 127,
+    total_findings: 3,
+    error: null,
+    created_at: "2026-08-16T08:20:00Z",
+  };
+
+  function validatePosts(onCall: ReturnType<typeof vi.fn>) {
+    return onCall.mock.calls.filter(
+      ([url, init]) =>
+        String(url) === "/api/findings/f-sql-1/validate" &&
+        (init?.method ?? "").toUpperCase() === "POST",
+    );
+  }
+
+  function provePosts(onCall: ReturnType<typeof vi.fn>) {
+    return onCall.mock.calls.filter(
+      ([url, init]) =>
+        String(url) === "/api/findings/f-sql-1/prove" &&
+        (init?.method ?? "").toUpperCase() === "POST",
+    );
+  }
+
+  it("validate sends the exact selected scan_run_id with one run", async () => {
+    const user = userEvent.setup();
+    const onCall = vi.fn<(url: string, init?: RequestInit) => void>();
+    mockValidateFlow({
+      detail: detail({ project: PROJECT, scan_runs: [RUN_1], validation: null }),
+      afterValidate: detail({ project: PROJECT, scan_runs: [RUN_1] }),
+      onCall,
+    });
+    renderPage();
+    await loaded();
+    await user.click(
+      within(panel("Validation")).getByRole("button", { name: "Validate" }),
+    );
+    await within(panel("Validation")).findByRole("status");
+    const post = validatePosts(onCall)[0];
+    expect(post).toBeDefined();
+    expect(JSON.parse(String(post[1]?.body))).toEqual({
+      provider: "huggingface",
+      scan_run_id: RUN_1.scan_run_id,
+    });
+  });
+
+  it("prove sends the exact selected scan_run_id with one run", async () => {
+    const user = userEvent.setup();
+    const onCall = vi.fn<(url: string, init?: RequestInit) => void>();
+    mockProveFlow({
+      detail: detail({
+        project: PROJECT,
+        scan_runs: [RUN_1],
+        validation: { ...detail({}).validation! },
+        proof: null,
+      }),
+      afterProve: detail({ project: PROJECT, scan_runs: [RUN_1] }),
+      onCall,
+    });
+    renderPage();
+    await loaded();
+    await user.click(
+      within(panel("Proof")).getByRole("button", { name: "Prove Finding" }),
+    );
+    await within(panel("Proof")).findByRole("status");
+    const post = provePosts(onCall)[0];
+    expect(post).toBeDefined();
+    expect(JSON.parse(String(post[1]?.body))).toEqual({
+      scan_run_id: RUN_1.scan_run_id,
+    });
+  });
+
+  it("request approval sends the exact selected scan_run_id with one run", async () => {
+    const user = userEvent.setup();
+    const onCall = vi.fn<(url: string, init?: RequestInit) => void>();
+    const payload = detail({
+      project: PROJECT,
+      scan_runs: [RUN_1],
+      approval: null,
+    });
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = (init?.method ?? "GET").toUpperCase();
+        onCall(url, init);
+        if (method === "GET" && url === "/api/findings/f-sql-1") {
+          return { ok: true, status: 200, json: async () => payload };
+        }
+        if (method === "GET" && url === "/api/findings/f-sql-1/approval") {
+          return {
+            ok: false,
+            status: 404,
+            json: async () => ({ detail: "no approval request for finding: f-sql-1" }),
+          };
+        }
+        if (method === "POST" && url === "/api/findings/f-sql-1/approval") {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              id: "ap-14k",
+              finding_id: "f-sql-1",
+              status: "pending",
+              requested_at: "2026-08-16T09:00:00Z",
+              requested_by: "system",
+              reviewed_at: null,
+              reviewed_by: null,
+              reason: null,
+              action: "remediation",
+              version: 1,
+              scan_run_id: RUN_1.scan_run_id,
+            }),
+          };
+        }
+        throw new Error(`unexpected request: ${method} ${url}`);
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    renderPage();
+    await loaded();
+    await user.click(
+      within(panel("Human Approval")).getByRole("button", {
+        name: "Request Approval",
+      }),
+    );
+    await waitFor(() => {
+      expect(
+        onCall.mock.calls.some(
+          ([url, requestInit]) =>
+            String(url) === "/api/findings/f-sql-1/approval" &&
+            (requestInit?.method ?? "").toUpperCase() === "POST",
+        ),
+      ).toBe(true);
+    });
+    const post = onCall.mock.calls.find(
+      ([url, requestInit]) =>
+        String(url) === "/api/findings/f-sql-1/approval" &&
+        (requestInit?.method ?? "").toUpperCase() === "POST",
+    );
+    expect(JSON.parse(String(post?.[1]?.body))).toEqual({
+      action: "remediation",
+      requested_by: "system",
+      scan_run_id: RUN_1.scan_run_id,
+    });
+  });
+
+  it("disables Validate until a run context is selected with multiple runs", async () => {
+    const user = userEvent.setup();
+    mockValidateFlow({
+      detail: detail({
+        project: PROJECT,
+        scan_runs: [RUN_2, RUN_1],
+        validation: null,
+      }),
+      afterValidate: detail({ project: PROJECT, scan_runs: [RUN_2, RUN_1] }),
+    });
+    renderPage();
+    await loaded();
+    const validate = within(panel("Validation")).getByRole("button", {
+      name: "Validate",
+    });
+    expect(validate).toBeDisabled();
+    const select = screen.getByLabelText("Scan run context");
+    await user.selectOptions(select, RUN_2.scan_run_id);
+    expect(validate).toBeEnabled();
+  });
+
+  it("disables Prove Finding until a run context is selected", async () => {
+    const user = userEvent.setup();
+    mockProveFlow({
+      detail: detail({
+        project: PROJECT,
+        scan_runs: [RUN_2, RUN_1],
+        validation: { ...detail({}).validation! },
+        proof: null,
+      }),
+      afterProve: detail({ project: PROJECT, scan_runs: [RUN_2, RUN_1] }),
+    });
+    renderPage();
+    await loaded();
+    const prove = within(panel("Proof")).getByRole("button", {
+      name: "Prove Finding",
+    });
+    expect(prove).toBeDisabled();
+    const select = screen.getByLabelText("Scan run context");
+    await user.selectOptions(select, RUN_2.scan_run_id);
+    expect(prove).toBeEnabled();
+  });
+
+  it("disables Request Approval until a run context is selected", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "/api/findings/f-sql-1") {
+          return {
+            ok: true,
+            status: 200,
+            json: async () =>
+              detail({ project: PROJECT, scan_runs: [RUN_2, RUN_1], approval: null }),
+          };
+        }
+        if (url === "/api/findings/f-sql-1/approval") {
+          return {
+            ok: false,
+            status: 404,
+            json: async () => ({ detail: "no approval request for finding: f-sql-1" }),
+          };
+        }
+        throw new Error(`unexpected request: ${url}`);
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    renderPage();
+    await loaded();
+    const requestApproval = within(panel("Human Approval")).getByRole("button", {
+      name: "Request Approval",
+    });
+    expect(requestApproval).toBeDisabled();
+    const select = screen.getByLabelText("Scan run context");
+    await user.selectOptions(select, RUN_2.scan_run_id);
+    expect(requestApproval).toBeEnabled();
+  });
+
+  it("shares one run context across risk and validate actions", async () => {
+    const user = userEvent.setup();
+    const onCall = vi.fn<(url: string, init?: RequestInit) => void>();
+    let riskDone = false;
+    let validateDone = false;
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = (init?.method ?? "GET").toUpperCase();
+        onCall(url, init);
+        if (method === "GET" && url === "/api/findings/f-sql-1") {
+          const current = validateDone
+            ? detail({
+                project: PROJECT,
+                scan_runs: [RUN_2, RUN_1],
+                risk: { ...detail({}).risk!, ...RISK_OUT },
+                validation: { ...detail({}).validation!, ...VALIDATION_OUT },
+              })
+            : riskDone
+              ? detail({
+                  project: PROJECT,
+                  scan_runs: [RUN_2, RUN_1],
+                  risk: { ...detail({}).risk!, ...RISK_OUT },
+                  validation: null,
+                })
+              : detail({
+                  project: PROJECT,
+                  scan_runs: [RUN_2, RUN_1],
+                  risk: null,
+                  sla: null,
+                  validation: null,
+                });
+          return { ok: true, status: 200, json: async () => current };
+        }
+        if (method === "GET" && url === "/api/findings/f-sql-1/approval") {
+          return {
+            ok: false,
+            status: 404,
+            json: async () => ({ detail: "no approval request" }),
+          };
+        }
+        if (method === "POST" && url === "/api/findings/f-sql-1/risk") {
+          riskDone = true;
+          return { ok: true, status: 200, json: async () => RISK_OUT };
+        }
+        if (method === "POST" && url === "/api/findings/f-sql-1/validate") {
+          validateDone = true;
+          return { ok: true, status: 200, json: async () => VALIDATION_OUT };
+        }
+        throw new Error(`unexpected request: ${method} ${url}`);
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    renderPage();
+    await loaded();
+    const select = screen.getByLabelText("Scan run context");
+    await user.selectOptions(select, RUN_2.scan_run_id);
+    await user.click(
+      within(panel("Risk")).getByRole("button", { name: "Assess Risk" }),
+    );
+    await within(panel("Risk")).findByRole("status");
+    await user.click(
+      within(panel("Validation")).getByRole("button", { name: "Validate" }),
+    );
+    await within(panel("Validation")).findByRole("status");
+    const riskPost = onCall.mock.calls.find(
+      ([url, requestInit]) =>
+        String(url) === "/api/findings/f-sql-1/risk" &&
+        (requestInit?.method ?? "").toUpperCase() === "POST",
+    );
+    const validatePost = onCall.mock.calls.find(
+      ([url, requestInit]) =>
+        String(url) === "/api/findings/f-sql-1/validate" &&
+        (requestInit?.method ?? "").toUpperCase() === "POST",
+    );
+    expect(JSON.parse(String(riskPost?.[1]?.body))).toEqual({
+      scan_run_id: RUN_2.scan_run_id,
+    });
+    expect(JSON.parse(String(validatePost?.[1]?.body))).toEqual({
+      provider: "huggingface",
+      scan_run_id: RUN_2.scan_run_id,
+    });
   });
 });
 
@@ -2853,6 +3485,26 @@ describe("finding approval decisions", () => {
     ).toBeInTheDocument();
     expect(
       within(section).getByRole("button", { name: "Request Changes" }),
+    ).toBeInTheDocument();
+  });
+
+  it("states the demo reviewer identity and no authentication in the decision modal", async () => {
+    const user = userEvent.setup();
+    mockDetail(detail({}));
+    renderPage();
+    await loaded();
+    await user.click(
+      within(approvalSection()).getByRole("button", { name: "Approve" }),
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByText(
+        /This decision is recorded under the demo reviewer identity/,
+      ),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByText("security-analyst")).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/Authentication is not currently enabled/),
     ).toBeInTheDocument();
   });
 

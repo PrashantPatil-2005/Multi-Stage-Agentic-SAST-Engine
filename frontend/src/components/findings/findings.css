@@ -287,6 +287,47 @@
   animation: dash-pulse 1.4s ease-in-out infinite;
 }
 
+/* ------------------------------------------------------------ Scope */
+
+.f-scope {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-left: 3px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+}
+
+.f-scope__label {
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.f-scope__name {
+  font-weight: 600;
+}
+
+.f-scope__clear {
+  margin-left: auto;
+  color: var(--color-primary);
+}
+
+.f-scope__clear:hover {
+  text-decoration: underline;
+}
+
+.f-scope-empty {
+  margin: 0;
+  padding: 14px 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
 /* ------------------------------------------------------- Empty/Error */
 
 .f-empty {

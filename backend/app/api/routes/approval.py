@@ -26,6 +26,12 @@ from app.approval.service import (
 from app.approval.store import get_approval_store
 from app.dedup.service import repo_label_for_file
 from app.risk.service import all_risk_assessments
+from app.scan.run_models import STAGE_APPROVAL
+from app.scan.run_service import (
+    StageContextError,
+    record_stage_execution,
+    validate_stage_context,
+)
 from app.validate.store import get_finding_store
 
 router = APIRouter(tags=["approval"])
@@ -41,6 +47,7 @@ _STATUS_RANK = {
 class ApprovalRequestIn(BaseModel):
     action: ApprovalAction = "remediation"
     requested_by: str = "system"
+    scan_run_id: str | None = None
 
 
 class ApprovalDecisionIn(BaseModel):
@@ -71,14 +78,32 @@ def _require_approval(approval_id: str) -> ApprovalRequest:
     return request
 
 
+def _require_stage_context(scan_run_id: str, finding_id: str) -> None:
+    try:
+        validate_stage_context(scan_run_id, finding_id)
+    except StageContextError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+
 def _transition(
     approval_id: str, body: ApprovalDecisionIn, method: str
 ) -> ApprovalRequest:
-    _require_approval(approval_id)
-    try:
+    request = _require_approval(approval_id)
+    run_id = request.scan_run_id
+
+    def _do_transition() -> ApprovalRequest:
         return getattr(ApprovalService(), method)(
             approval_id, reviewed_by=body.reviewed_by, reason=body.reason
         )
+
+    if run_id is None:
+        # Legacy / context-free request: no stage lineage, unchanged.
+        try:
+            return _do_transition()
+        except InvalidTransitionError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+    try:
+        return record_stage_execution(run_id, STAGE_APPROVAL, _do_transition)
     except InvalidTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
@@ -91,12 +116,25 @@ def request_approval(
 ) -> ApprovalRequest:
     _require_finding(finding_id)
     payload = body or ApprovalRequestIn()
-    try:
+
+    def _request() -> ApprovalRequest:
         return ApprovalService().request_approval(
             finding_id,
             action=payload.action,
             requested_by=payload.requested_by,
+            scan_run_id=payload.scan_run_id,
         )
+
+    if payload.scan_run_id is not None:
+        _require_stage_context(payload.scan_run_id, finding_id)
+        try:
+            return record_stage_execution(
+                payload.scan_run_id, STAGE_APPROVAL, _request
+            )
+        except ApprovalGateError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+    try:
+        return _request()
     except ApprovalGateError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 

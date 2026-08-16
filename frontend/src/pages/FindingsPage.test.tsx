@@ -561,3 +561,156 @@ describe("findings page", () => {
     expect(screen.queryByText("0%")).not.toBeInTheDocument();
   });
 });
+
+describe("findings repository scope", () => {
+  const PROJECT_ID = "aaaa0000aaaa0000aaaa0000aaaa0000";
+
+  const PROJECT_DETAIL = {
+    id: PROJECT_ID,
+    name: "web-app",
+    source_type: "git",
+    location: "https://github.com/example/web-app",
+    language: "python",
+    status: "prepared",
+    created_at: "2026-08-15T09:00:00Z",
+    summary: {
+      fetched_files: 5,
+      fetched_bytes: 2048,
+      python_files: 4,
+      parse_failures: 0,
+      total_lines: 120,
+      function_count: 10,
+      class_count: 2,
+      call_count: 30,
+      import_count: 8,
+      assignment_count: 40,
+    },
+    files: [],
+  };
+
+  function scopedFindings(items: FindingListItem[]) {
+    return items.filter((item) => item.repository === "repo-a");
+  }
+
+  function mockScoped(options: {
+    projectStatus?: number;
+    findingsStatus?: number;
+    findings?: FindingListItem[];
+  }) {
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = (init?.method ?? "GET").toUpperCase();
+        expect(method).toBe("GET");
+        if (url === `/api/findings?project_id=${PROJECT_ID}`) {
+          if (options.findingsStatus === 404) {
+            return {
+              ok: false,
+              status: 404,
+              json: async () => ({ detail: `project not found: ${PROJECT_ID}` }),
+            };
+          }
+          return {
+            ok: true,
+            status: 200,
+            json: async () => options.findings ?? scopedFindings(makeFindings()),
+          };
+        }
+        if (url === `/api/projects/${PROJECT_ID}`) {
+          if (options.projectStatus === 404) {
+            return { ok: false, status: 404, json: async () => ({ detail: "not found" }) };
+          }
+          return { ok: true, status: 200, json: async () => PROJECT_DETAIL };
+        }
+        throw new Error(`unexpected request: ${method} ${url}`);
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("shows the active repository scope and only its findings", async () => {
+    mockScoped({});
+    renderPage(`/findings?project_id=${PROJECT_ID}`);
+    await loaded();
+    const scope = screen.getByRole("status");
+    expect(scope).toHaveTextContent("Repository:");
+    expect(scope).toHaveTextContent("web-app");
+    expect(scope.getAttribute("class")).toContain("f-scope");
+    expect(
+      within(scope).getByRole("link", { name: "Clear filter" }),
+    ).toHaveAttribute("href", "/findings");
+    expect(rows()).toHaveLength(3);
+    expect(within(table()).queryByText("cli.py")).not.toBeInTheDocument();
+    expect(within(table()).queryByText("legacy.py")).not.toBeInTheDocument();
+    expect(within(table()).getByText("users.py")).toBeInTheDocument();
+    expect(within(table()).getByText("fetch.py")).toBeInTheDocument();
+    expect(within(table()).getByText("reports.py")).toBeInTheDocument();
+  });
+
+  it("shows zero honestly when the repository has no findings", async () => {
+    mockScoped({ findings: [] });
+    renderPage(`/findings?project_id=${PROJECT_ID}`);
+    expect(
+      await screen.findByText("0 findings for this repository."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.queryByText("No security findings")).not.toBeInTheDocument();
+    expect(screen.getByText("Repository:")).toBeInTheDocument();
+  });
+
+  it("shows Repository not found for an unknown project without global fallback", async () => {
+    const fetchMock = mockScoped({ findingsStatus: 404 });
+    renderPage(`/findings?project_id=${PROJECT_ID}`);
+    expect(
+      await screen.findByRole("alert", { name: "Repository not found" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Repository not found.")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "View all findings" }),
+    ).toHaveAttribute("href", "/findings");
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    const urls = fetchMock.mock.calls.map(([input]) => String(input));
+    expect(urls.some((url) => url === "/api/findings")).toBe(false);
+    expect(urls).toContain(`/api/findings?project_id=${PROJECT_ID}`);
+  });
+
+  it("never fetches the unscoped global list while scoped", async () => {
+    const fetchMock = mockScoped({});
+    renderPage(`/findings?project_id=${PROJECT_ID}`);
+    await loaded();
+    const urls = fetchMock.mock.calls.map(([input]) => String(input));
+    expect(urls).toContain(`/api/findings?project_id=${PROJECT_ID}`);
+    expect(urls.some((url) => url === "/api/findings")).toBe(false);
+  });
+
+  it("clears the filter back to the global list", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === `/api/findings?project_id=${PROJECT_ID}`) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => scopedFindings(makeFindings()),
+        };
+      }
+      if (url === `/api/projects/${PROJECT_ID}`) {
+        return { ok: true, status: 200, json: async () => PROJECT_DETAIL };
+      }
+      if (url === "/api/findings") {
+        return { ok: true, status: 200, json: async () => makeFindings() };
+      }
+      throw new Error(`unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderPage(`/findings?project_id=${PROJECT_ID}`);
+    await loaded();
+    expect(rows()).toHaveLength(3);
+    await user.click(screen.getByRole("link", { name: "Clear filter" }));
+    await waitFor(() => {
+      expect(rows()).toHaveLength(7);
+    });
+    expect(screen.queryByText("Repository:")).not.toBeInTheDocument();
+  });
+});

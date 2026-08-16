@@ -164,6 +164,7 @@ class CodeModel(BaseModel):
     """
 
     language: Literal["python"] = "python"
+    project_id: str = ""
     files: list[SourceFile]
     module_map: dict[str, str]
     function_index: list[FunctionInfo]

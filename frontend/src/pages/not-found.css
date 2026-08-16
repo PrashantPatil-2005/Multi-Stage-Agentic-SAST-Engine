@@ -1,0 +1,28 @@
+/* Not-found page (Phase 14I). */
+
+.nf-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.nf-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 8px 0;
+}
+
+.nf-body__text {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--color-text-muted);
+  max-width: 560px;
+}
+
+.nf-body__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

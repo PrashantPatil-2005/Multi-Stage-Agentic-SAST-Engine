@@ -16,11 +16,14 @@ const IDLE: ValidateState = { loading: false, error: null };
 export function useValidateFinding() {
   const [state, setState] = useState<ValidateState>(IDLE);
 
+  /* ``scanRunId`` is the explicitly selected scan-run context (Phase 14K):
+     it is sent verbatim so the backend records the VALIDATE execution.
+     Never inferred client-side. */
   const runValidation = useCallback(
-    async (findingId: string): Promise<boolean> => {
+    async (findingId: string, scanRunId?: string): Promise<boolean> => {
       setState({ loading: true, error: null });
       try {
-        await runValidationApi(findingId);
+        await runValidationApi(findingId, scanRunId);
         setState(IDLE);
         return true;
       } catch (error) {

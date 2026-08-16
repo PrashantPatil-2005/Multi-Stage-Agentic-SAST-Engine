@@ -95,6 +95,7 @@ class DeduplicationService:
 
         _GROUPS.clear()
         _GROUPS.update(registry)
+        self._persist_groups(registry)
         return DeduplicationResult(
             total_findings=len(findings),
             unique_findings=len(groups),
@@ -102,14 +103,103 @@ class DeduplicationService:
             groups=groups,
         )
 
+    def _persist_groups(self, registry: dict[str, DeduplicationGroup]) -> None:
+        from app.db.models import DeduplicationGroupRow
+        from app.db.persistence import db_delete_all, db_insert
+
+        db_delete_all(_factory, DeduplicationGroupRow)
+        for group in registry.values():
+            db_insert(
+                _factory,
+                DeduplicationGroupRow(
+                    fingerprint=group.fingerprint,
+                    payload=group.model_dump(mode="json"),
+                ),
+            )
+
 
 #: In-memory registry of the most recent run, keyed by fingerprint.
-#: Used by the API (GET /api/deduplication/{fingerprint}); no persistence yet.
+#: Used by the API (GET /api/deduplication/{fingerprint}); persisted to
+#: SQLite when a session factory is configured (app/db/persistence.py).
 _GROUPS: dict[str, DeduplicationGroup] = {}
+_factory = None
+
+
+def set_dedup_store_factory(factory) -> None:
+    """Rehydrate the dedup group registry from the database (lifespan)."""
+    from app.db.models import DeduplicationGroupRow
+    from app.db.persistence import db_load_all
+
+    global _factory
+    _factory = factory
+    _GROUPS.clear()
+    for key, group in db_load_all(
+        factory, DeduplicationGroupRow, DeduplicationGroup, "fingerprint"
+    ):
+        _GROUPS[key] = group
 
 
 def lookup_group(fingerprint: str) -> DeduplicationGroup | None:
     return _GROUPS.get(fingerprint)
+
+
+def remove_findings(finding_ids: set[str]) -> None:
+    """Drop deleted findings from the current group registry.
+
+    Used by repository deletion: a deleted repository's findings must not
+    stay listed as group members. Affected groups are rebuilt from the
+    remaining member findings (canonical = smallest remaining id); groups
+    with no remaining members are removed outright. Idempotent - findings
+    that never were grouped are fine.
+    """
+    from app.db.models import DeduplicationGroupRow
+    from app.db.persistence import db_delete_all, db_insert
+    from app.validate.store import get_finding_store
+
+    finding_store = get_finding_store()
+    changed = False
+    for fingerprint, group in list(_GROUPS.items()):
+        remaining = [
+            fid for fid in group.member_finding_ids if fid not in finding_ids
+        ]
+        if len(remaining) == len(group.member_finding_ids):
+            continue
+        changed = True
+        if not remaining:
+            del _GROUPS[fingerprint]
+            continue
+        members = [
+            finding
+            for fid in remaining
+            if (finding := finding_store.get(fid)) is not None
+        ]
+        if not members:
+            del _GROUPS[fingerprint]
+            continue
+        members.sort(key=lambda f: f.id)
+        canonical = members[0]
+        _GROUPS[fingerprint] = group.model_copy(
+            update={
+                "canonical_finding_id": canonical.id,
+                "member_finding_ids": [f.id for f in members],
+                "occurrence_count": len(members),
+                "repositories": sorted(
+                    {repo_label_for_file(f.source.file) for f in members}
+                ),
+                "representative_finding": canonical,
+            }
+        )
+    if not changed:
+        return
+    db_delete_all(_factory, DeduplicationGroupRow)
+    for group in _GROUPS.values():
+        db_insert(
+            _factory,
+            DeduplicationGroupRow(
+                fingerprint=group.fingerprint,
+                payload=group.model_dump(mode="json"),
+            ),
+        )
 
 
 def all_groups() -> list[DeduplicationGroup]:
@@ -118,4 +208,8 @@ def all_groups() -> list[DeduplicationGroup]:
 
 
 def reset_groups() -> None:
+    from app.db.models import DeduplicationGroupRow
+    from app.db.persistence import db_delete_all
+
     _GROUPS.clear()
+    db_delete_all(_factory, DeduplicationGroupRow)

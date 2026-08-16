@@ -5,6 +5,17 @@ the prepared project's stored CodeModel and registers the findings in the
 in-memory finding store (visible through the read-only /api/findings routes).
 """
 
+import pytest
+
+from app.validate.store import get_finding_store
+
+
+@pytest.fixture(autouse=True)
+def _clear_finding_store():
+    get_finding_store().clear()
+    yield
+    get_finding_store().clear()
+
 
 def _create_project(client, fixture_repo):
     resp = client.post(
@@ -59,6 +70,42 @@ def test_scan_unknown_project_404(client):
     resp = client.post("/api/projects/does-not-exist/scan")
     assert resp.status_code == 404
     assert "project not found" in resp.json()["detail"]
+
+
+def test_two_projects_with_identical_code_do_not_collide(client, fixture_repo):
+    """GAP-02 regression: project-scoped ids, so identical vulnerable code in
+    two repositories never overwrites in the shared finding store."""
+    first = client.post(
+        "/api/projects",
+        json={
+            "name": "app-a",
+            "source_type": "directory",
+            "location": str(fixture_repo),
+        },
+    ).json()
+    second = client.post(
+        "/api/projects",
+        json={
+            "name": "app-b",
+            "source_type": "directory",
+            "location": str(fixture_repo),
+        },
+    ).json()
+    scan_a = client.post(f"/api/projects/{first['id']}/scan").json()
+    scan_b = client.post(f"/api/projects/{second['id']}/scan").json()
+    ids_a = set(scan_a["finding_ids"])
+    ids_b = set(scan_b["finding_ids"])
+    assert ids_a
+    assert scan_a["total_findings"] == len(ids_a)
+    assert ids_a.isdisjoint(ids_b)
+
+    listed = client.get("/api/findings").json()
+    listed_ids = [item["finding_id"] for item in listed]
+    assert len(listed_ids) == len(set(listed_ids))
+    assert len(listed_ids) == len(ids_a) + len(ids_b)
+
+    rescan_a = client.post(f"/api/projects/{first['id']}/scan").json()
+    assert set(rescan_a["finding_ids"]) == ids_a
 
 
 def test_scan_of_empty_project_returns_zero_findings(client, tmp_path):

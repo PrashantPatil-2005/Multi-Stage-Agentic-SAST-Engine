@@ -19,13 +19,16 @@ from app.api.routes import (
     repositories,
     risk,
     risk_summary,
+    scans,
     validations,
     validation_summary,
 )
 from app.config import Settings, get_settings
+from app.db.persistence import configure_stores
 from app.db.session import init_db, make_engine, make_session_factory
 from app.prepare.parser import PythonASTParser
 from app.prepare.service import PrepareService
+from app.risk.sla_evaluator import SlaEvaluator
 
 
 def configure_logging(level: str) -> None:
@@ -52,7 +55,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.settings = settings
         app.state.session_factory = session_factory
         app.state.prepare_service = prepare_service
-        yield
+        configure_stores(session_factory)
+        evaluator = SlaEvaluator(
+            interval_seconds=settings.sla_check_interval_seconds
+        )
+        app.state.sla_evaluator = evaluator
+        evaluator.start()
+        try:
+            yield
+        finally:
+            await evaluator.stop()
 
     app = FastAPI(
         title=settings.app_name,
@@ -66,6 +78,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
     app.include_router(projects.router, prefix="/api")
+    app.include_router(scans.router, prefix="/api")
     app.include_router(findings.router, prefix="/api")
     app.include_router(validations.router, prefix="/api")
     app.include_router(proofs.router, prefix="/api")

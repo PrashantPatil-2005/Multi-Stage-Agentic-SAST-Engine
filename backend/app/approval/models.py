@@ -26,6 +26,11 @@ class ApprovalRequest(BaseModel):
     reason: str | None = None
     action: ApprovalAction
     version: int
+    #: Explicit scan-run context (Phase 14K): the run the approval workflow
+    #: was requested against. Stored once at creation and inherited by every
+    #: subsequent decision, so the reviewer never resends it. None for
+    #: pre-14K requests or requests made without a run context.
+    scan_run_id: str | None = None
 
 
 class ApprovalEvent(BaseModel):

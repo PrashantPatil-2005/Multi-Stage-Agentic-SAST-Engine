@@ -93,6 +93,7 @@ class ApprovalService:
         action: ApprovalAction = "remediation",
         requested_by: str = "system",
         requested_at: datetime | None = None,
+        scan_run_id: str | None = None,
     ) -> ApprovalRequest:
         store = get_approval_store()
 
@@ -122,6 +123,7 @@ class ApprovalService:
             requested_by=requested_by,
             action=action,
             version=1,
+            scan_run_id=scan_run_id,
         )
         store.save(request)
         store.record_event(

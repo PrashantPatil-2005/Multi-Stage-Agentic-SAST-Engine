@@ -27,6 +27,10 @@
   color: var(--color-text);
 }
 
+.profile-identity__role {
+  margin: 4px 0 0;
+}
+
 .profile-identity__note {
   margin: 4px 0 0;
   font-size: 12.5px;

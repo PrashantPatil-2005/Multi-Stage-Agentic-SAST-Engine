@@ -197,12 +197,36 @@ class SLAService:
 
 
 # --------------------------------------------------------------------------
-# In-memory stores (same convention as validate/prove/dedup singletons).
+# In-memory stores (same convention as validate/prove/dedup singletons),
+# with optional SQLite backing via app/db/persistence.py.
 # --------------------------------------------------------------------------
 
 _risk_store: dict[str, RiskAssessment] = {}
 _sla_store: dict[str, SLARecord] = {}
 _escalation_store: dict[str, list[EscalationEvent]] = {}
+_factory = None
+
+
+def set_risk_store_factory(factory) -> None:
+    """Rehydrate risk/SLA/escalation stores from the database (lifespan)."""
+    from app.db.models import RiskAssessmentRow, SlaEventRow, SlaRecordRow
+    from app.db.persistence import db_load_all
+
+    global _factory
+    _factory = factory
+    _risk_store.clear()
+    _sla_store.clear()
+    _escalation_store.clear()
+    for key, assessment in db_load_all(
+        factory, RiskAssessmentRow, RiskAssessment, "finding_id"
+    ):
+        _risk_store[key] = assessment
+    for key, record in db_load_all(factory, SlaRecordRow, SLARecord, "finding_id"):
+        _sla_store[key] = record
+    for _, event in db_load_all(factory, SlaEventRow, EscalationEvent, "id"):
+        _escalation_store.setdefault(event.finding_id, []).append(event)
+    for events in _escalation_store.values():
+        events.sort(key=lambda e: e.created_at)
 
 
 def get_risk_assessment(finding_id: str) -> RiskAssessment | None:
@@ -210,7 +234,13 @@ def get_risk_assessment(finding_id: str) -> RiskAssessment | None:
 
 
 def record_risk_assessment(assessment: RiskAssessment) -> None:
+    from app.db.models import RiskAssessmentRow
+    from app.db.persistence import db_upsert
+
     _risk_store[assessment.finding_id] = assessment
+    db_upsert(
+        _factory, RiskAssessmentRow, "finding_id", assessment.finding_id, assessment
+    )
 
 
 def get_sla_record(finding_id: str) -> SLARecord | None:
@@ -218,7 +248,11 @@ def get_sla_record(finding_id: str) -> SLARecord | None:
 
 
 def record_sla_record(record: SLARecord) -> None:
+    from app.db.models import SlaRecordRow
+    from app.db.persistence import db_upsert
+
     _sla_store[record.finding_id] = record
+    db_upsert(_factory, SlaRecordRow, "finding_id", record.finding_id, record)
 
 
 def get_escalation_events(finding_id: str) -> list[EscalationEvent]:
@@ -226,7 +260,17 @@ def get_escalation_events(finding_id: str) -> list[EscalationEvent]:
 
 
 def record_escalation_event(event: EscalationEvent) -> None:
+    from app.db.models import SlaEventRow
+    from app.db.persistence import db_insert
+
     _escalation_store.setdefault(event.finding_id, []).append(event)
+    db_insert(
+        _factory,
+        SlaEventRow(
+            finding_id=event.finding_id,
+            payload=event.model_dump(mode="json"),
+        ),
+    )
 
 
 def all_risk_assessments() -> list[RiskAssessment]:
@@ -244,7 +288,35 @@ def all_escalation_events() -> list[EscalationEvent]:
     return [event for events in _escalation_store.values() for event in events]
 
 
+def remove_finding_state(finding_id: str) -> None:
+    """Remove every risk/SLA/escalation record for one finding.
+
+    Used by repository deletion. Idempotent: missing records are fine.
+    """
+    from app.db.models import RiskAssessmentRow, SlaEventRow, SlaRecordRow
+    from app.db.persistence import db_delete
+
+    _risk_store.pop(finding_id, None)
+    _sla_store.pop(finding_id, None)
+    _escalation_store.pop(finding_id, None)
+    db_delete(_factory, RiskAssessmentRow, "finding_id", finding_id)
+    db_delete(_factory, SlaRecordRow, "finding_id", finding_id)
+    if _factory is None:
+        return
+    with _factory() as session:
+        session.query(SlaEventRow).filter(
+            SlaEventRow.finding_id == finding_id
+        ).delete()
+        session.commit()
+
+
 def reset_risk_stores() -> None:
+    from app.db.models import RiskAssessmentRow, SlaEventRow, SlaRecordRow
+    from app.db.persistence import db_delete_all
+
     _risk_store.clear()
     _sla_store.clear()
     _escalation_store.clear()
+    db_delete_all(_factory, RiskAssessmentRow)
+    db_delete_all(_factory, SlaRecordRow)
+    db_delete_all(_factory, SlaEventRow)

@@ -1,7 +1,8 @@
 /* Typed API client for findings. Mirrors the backend response models in
-   app/api/findings_models.py (GET /api/findings). */
+   app/api/findings_models.py (GET /api/findings). The optional project_id
+   scopes the list to one repository via the backend's explicit scan
+   lineage (404 for an unknown project - never a silent global fallback). */
 
-import { fetchJson } from "./dashboard";
 
 export interface FindingSlaInfo {
   status: "active" | "breached" | "resolved" | "not_applicable" | "none";
@@ -30,6 +31,27 @@ export interface FindingListItem {
   sla: FindingSlaInfo;
 }
 
-export function getFindings(): Promise<FindingListItem[]> {
-  return fetchJson<FindingListItem[]>("/api/findings");
+export class FindingsRequestError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "FindingsRequestError";
+    this.status = status;
+  }
+}
+
+export function getFindings(projectId?: string): Promise<FindingListItem[]> {
+  const url = projectId
+    ? `/api/findings?project_id=${encodeURIComponent(projectId)}`
+    : "/api/findings";
+  return fetch(url).then((response) => {
+    if (!response.ok) {
+      throw new FindingsRequestError(
+        response.status,
+        `request failed: ${url} (${response.status})`,
+      );
+    }
+    return response.json() as Promise<FindingListItem[]>;
+  });
 }

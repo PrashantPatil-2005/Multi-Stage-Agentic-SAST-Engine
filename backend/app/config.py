@@ -6,6 +6,7 @@ No secrets are hardcoded anywhere in the codebase.
 
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,6 +31,10 @@ class Settings(BaseSettings):
     max_total_size_bytes: int = 50 * 1024 * 1024
     max_files: int = 5000
     git_clone_timeout_seconds: int = 60
+
+    # Background SLA evaluation: how often the evaluator inspects active
+    # SLA records (seconds). Conservative for development; must be >= 1.
+    sla_check_interval_seconds: int = Field(default=60, gt=0)
 
     log_level: str = "INFO"
 

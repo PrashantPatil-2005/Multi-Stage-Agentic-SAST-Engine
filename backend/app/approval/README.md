@@ -69,10 +69,15 @@ transition), `422` (invalid body / naive datetime).
 ## Security boundaries
 
 - `approve()`/`reject()`/`request_changes()`/`resubmit()` only mutate
-  in-memory state + append audit events — **no** subprocess, shell, file
+  approval state + append audit events — **no** subprocess, shell, file
   modification, network, or LLM calls (covered by dedicated tests).
-- Approval state is in-memory (same convention as the other stages); a
-  persistence backend can be added later without changing the contracts.
+- Requests and events are kept in an in-memory registry for fast reads and
+  mirrored into SQLite (`approval_requests` / `approval_events`) when a
+  session factory is configured, so a backend restart keeps the workflow
+  (same convention as the other pipeline stores; see `app/db/persistence.py`).
+- Reviewer identity is a static demo value (`security-analyst`) supplied by
+  the frontend; there is no authentication. Every decision records this
+  identity in the audit trail.
 
 ## Integration with other stages
 

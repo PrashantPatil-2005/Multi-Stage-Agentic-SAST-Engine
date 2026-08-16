@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { useFindingDetail } from "../hooks/useFindingDetail";
@@ -9,9 +10,11 @@ import { CodeEvidence } from "../components/finding-detail/CodeEvidence";
 import { DeduplicationPanel } from "../components/finding-detail/DeduplicationPanel";
 import { FindingHeader } from "../components/finding-detail/FindingHeader";
 import { FindingPipeline } from "../components/finding-detail/FindingPipeline";
+import { LineagePanel } from "../components/finding-detail/LineagePanel";
 import { ProofPanel } from "../components/finding-detail/ProofPanel";
 import { RawFindingData } from "../components/finding-detail/RawFindingData";
 import { RiskPanel } from "../components/finding-detail/RiskPanel";
+import { RunContextSelect } from "../components/finding-detail/RunContextSelect";
 import { SlaPanel } from "../components/finding-detail/SlaPanel";
 import { ValidationPanel } from "../components/finding-detail/ValidationPanel";
 import { Button } from "../components/ui/Button";
@@ -60,38 +63,66 @@ export function FindingDetailPage() {
   const riskActions = useRiskActions();
   const validateActions = useValidateFinding();
   const proveActions = useProveFinding();
+  const [runContextId, setRunContextId] = useState<string | null>(null);
+  // Tracks the producing-run set so an explicit user selection survives
+  // detail refetches (stage actions call retry()); the selection only
+  // resets when the set of producing runs actually changes.
+  const producingRunIdsRef = useRef<string>("");
+
+  const producingRuns = detail?.scan_runs ?? [];
+  // A single producing run is unambiguous and used automatically; several
+  // runs require an explicit pick before any stage action may run.
+  const contextRequired = producingRuns.length > 1 && runContextId === null;
+
+  useEffect(() => {
+    const runs = detail?.scan_runs ?? [];
+    const runIds = runs.map((run) => run.scan_run_id).join("|");
+    if (runIds === producingRunIdsRef.current) return;
+    producingRunIdsRef.current = runIds;
+    setRunContextId(runs.length === 1 ? runs[0].scan_run_id : null);
+  }, [detail]);
 
   async function handleAssessRisk() {
-    if (!detail) return;
-    if (await riskActions.assess(detail.finding_id)) {
+    if (!detail || contextRequired) return;
+    if (await riskActions.assess(detail.finding_id, runContextId ?? undefined)) {
       retry();
     }
   }
 
   async function handleStartSla() {
-    if (!detail) return;
-    if (await riskActions.startSla(detail.finding_id)) {
+    if (!detail || contextRequired) return;
+    if (await riskActions.startSla(detail.finding_id, runContextId ?? undefined)) {
       retry();
     }
   }
 
   async function handleCheckSla() {
-    if (!detail) return;
-    if (await riskActions.checkSla(detail.finding_id)) {
+    if (!detail || contextRequired) return;
+    if (await riskActions.checkSla(detail.finding_id, runContextId ?? undefined)) {
       retry();
     }
   }
 
   async function handleValidateFinding() {
-    if (!detail) return;
-    if (await validateActions.runValidation(detail.finding_id)) {
+    if (!detail || contextRequired) return;
+    if (
+      await validateActions.runValidation(
+        detail.finding_id,
+        runContextId ?? undefined,
+      )
+    ) {
       retry();
     }
   }
 
   async function handleProveFinding() {
-    if (!detail) return;
-    if (await proveActions.proveFinding(detail.finding_id)) {
+    if (!detail || contextRequired) return;
+    if (
+      await proveActions.proveFinding(
+        detail.finding_id,
+        runContextId ?? undefined,
+      )
+    ) {
       retry();
     }
   }
@@ -141,20 +172,29 @@ export function FindingDetailPage() {
             onValidate={handleValidateFinding}
             validating={validateActions.validating}
             validateError={validateActions.error}
+            disabled={contextRequired}
           />
           <ProofPanel
             detail={detail}
             onProve={handleProveFinding}
             proving={proveActions.proving}
             proveError={proveActions.error}
+            disabled={contextRequired}
           />
         </div>
         <div className="fd-layout__side">
+          <LineagePanel detail={detail} />
+          <RunContextSelect
+            runs={producingRuns}
+            value={runContextId}
+            onChange={setRunContextId}
+          />
           <RiskPanel
             detail={detail}
             onAssess={handleAssessRisk}
             assessing={riskActions.risk.loading}
             riskError={riskActions.risk.error}
+            disabled={contextRequired}
           />
           <SlaPanel
             detail={detail}
@@ -164,8 +204,14 @@ export function FindingDetailPage() {
             onCheckSla={handleCheckSla}
             checking={riskActions.check.loading}
             checkError={riskActions.check.error}
+            disabled={contextRequired}
           />
-          <ApprovalPanel detail={detail} onApprovalChanged={retry} />
+          <ApprovalPanel
+            detail={detail}
+            onApprovalChanged={retry}
+            runContextId={runContextId}
+            disabled={contextRequired}
+          />
           <DeduplicationPanel detail={detail} />
           <RawFindingData detail={detail} />
         </div>

@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { DashboardSummary } from "../api/dashboard";
+import type { ScanRun } from "../api/scans";
 import { DashboardPage } from "./DashboardPage";
 
 function makeSummary(overrides: Partial<DashboardSummary> = {}): DashboardSummary {
@@ -96,13 +97,25 @@ function makeSummary(overrides: Partial<DashboardSummary> = {}): DashboardSummar
 
 type FetchMock = ReturnType<typeof vi.fn>;
 
-function mockApi({ summary }: { summary: DashboardSummary }) {
-  const fetchMock: FetchMock = vi.fn(async (input: RequestInfo | URL) => ({
-    ok: true,
-    status: 200,
-    json: async () =>
-      String(input).includes("/api/projects") ? summary.projects : summary,
-  }));
+function mockApi({
+  summary,
+  scanRuns = [],
+}: {
+  summary: DashboardSummary;
+  scanRuns?: ScanRun[];
+}) {
+  const fetchMock: FetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("/api/scans")) {
+      return { ok: true, status: 200, json: async () => scanRuns };
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () =>
+        url.includes("/api/projects") ? summary.projects : summary,
+    };
+  });
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
@@ -360,5 +373,126 @@ describe("dashboard page", () => {
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
       document.documentElement.clientWidth,
     );
+  });
+});
+
+describe("dashboard recent scan runs", () => {
+  const scanRuns: ScanRun[] = [
+    {
+      scan_run_id: "scan-run-0002",
+      project_id: "p1",
+      status: "completed",
+      started_at: "2026-08-16T07:10:00Z",
+      completed_at: "2026-08-16T07:10:05Z",
+      scanned_file_count: 127,
+      total_findings: 3,
+      error: null,
+      created_at: "2026-08-16T07:10:00Z",
+    },
+    {
+      scan_run_id: "scan-run-0001",
+      project_id: "p2",
+      status: "failed",
+      started_at: "2026-08-15T22:31:00Z",
+      completed_at: "2026-08-15T22:31:02Z",
+      scanned_file_count: null,
+      total_findings: null,
+      error: "rule engine timeout",
+      created_at: "2026-08-15T22:31:00Z",
+    },
+  ];
+
+  it("renders recent scan runs with real values and links", async () => {
+    mockApi({ summary: makeSummary(), scanRuns });
+    renderPage();
+    const section = (
+      await screen.findByRole("heading", { name: "Recent Scan Runs" })
+    ).closest("section") as HTMLElement;
+    expect(within(section).getByText("project-a")).toBeInTheDocument();
+    expect(within(section).getByText("project-b")).toBeInTheDocument();
+    expect(within(section).getAllByText("completed").length).toBeGreaterThan(0);
+    expect(within(section).getAllByText("failed").length).toBeGreaterThan(0);
+    expect(within(section).getByText(/3 findings/)).toBeInTheDocument();
+    const viewLinks = within(section).getAllByRole("link", {
+      name: /Open scan run/,
+    });
+    expect(viewLinks).toHaveLength(2);
+    expect(viewLinks[0]).toHaveAttribute("href", "/scans/scan-run-0002");
+    expect(viewLinks[1]).toHaveAttribute("href", "/scans/scan-run-0001");
+  });
+
+  it("shows an honest empty state when no scans have been run", async () => {
+    mockApi({ summary: makeSummary(), scanRuns: [] });
+    renderPage();
+    const section = (
+      await screen.findByRole("heading", { name: "Recent Scan Runs" })
+    ).closest("section") as HTMLElement;
+    expect(
+      within(section).getByText("No scans have been run yet."),
+    ).toBeInTheDocument();
+    expect(
+      within(section).queryByRole("link"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("never fabricates repository names for unknown projects", async () => {
+    mockApi({
+      summary: makeSummary(),
+      scanRuns: [
+        {
+          scan_run_id: "scan-run-0003",
+          project_id: "p-unknown",
+          status: "completed",
+          started_at: "2026-08-16T09:00:00Z",
+          completed_at: "2026-08-16T09:00:05Z",
+          scanned_file_count: 10,
+          total_findings: 1,
+          error: null,
+          created_at: "2026-08-16T09:00:00Z",
+        },
+      ],
+    });
+    renderPage();
+    const section = (
+      await screen.findByRole("heading", { name: "Recent Scan Runs" })
+    ).closest("section") as HTMLElement;
+    expect(within(section).queryByText("project-a")).not.toBeInTheDocument();
+    expect(within(section).getByText("p-unknow")).toBeInTheDocument();
+    expect(
+      within(section).getByRole("link", { name: /Open scan run/ }),
+    ).toHaveAttribute("href", "/scans/scan-run-0003");
+  });
+
+  it("renders a retry state when recent scans cannot load", async () => {
+    const user = userEvent.setup();
+    let failing = true;
+    const fetchMock: FetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/scans")) {
+        if (failing) throw new Error("network down");
+        return { ok: true, status: 200, json: async () => scanRuns };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () =>
+          url.includes("/api/projects")
+            ? makeSummary().projects
+            : makeSummary(),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderPage();
+    const section = (
+      await screen.findByRole("heading", { name: "Recent Scan Runs" })
+    ).closest("section") as HTMLElement;
+    expect(
+      await within(section).findByRole("alert"),
+    ).toHaveTextContent("Unable to load recent scans.");
+    failing = false;
+    await user.click(within(section).getByRole("button", { name: "Retry" }));
+    expect(
+      await within(section).findByText("project-a"),
+    ).toBeInTheDocument();
   });
 });

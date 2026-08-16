@@ -11,11 +11,14 @@ export function ProofPanel({
   onProve,
   proving = false,
   proveError = null,
+  disabled = false,
 }: {
   detail: FindingDetail;
   onProve?: () => void;
   proving?: boolean;
   proveError?: string | null;
+  /** Disable the action until a scan-run context is selected (Phase 14K). */
+  disabled?: boolean;
 }) {
   const proof = detail.proof;
   const validation = detail.validation;
@@ -49,7 +52,7 @@ export function ProofPanel({
               <Button
                 size="sm"
                 variant="secondary"
-                disabled={proving}
+                disabled={proving || disabled}
                 onClick={onProve}
               >
                 {proving ? "Proving\u2026" : "Prove Finding"}
@@ -129,6 +132,10 @@ export function ProofPanel({
             </dl>
           </>
         ) : null}
+        <p className="fd-proof__note">
+          This is a safe summary of the proof result. Raw payloads, artifacts
+          and sandbox internals are intentionally not exposed.
+        </p>
       </div>
     </Card>
   );

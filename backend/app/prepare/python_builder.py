@@ -30,6 +30,7 @@ class PythonASTCodeModelBuilder(ICodeModelBuilder):
         function_index = [f for file in snapshot.files for f in file.functions]
         model = CodeModel(
             language=snapshot.language,
+            project_id=snapshot.project_id,
             files=snapshot.files,
             module_map=module_map,
             function_index=function_index,

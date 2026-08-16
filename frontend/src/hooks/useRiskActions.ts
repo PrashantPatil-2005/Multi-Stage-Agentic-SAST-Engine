@@ -45,21 +45,24 @@ export function useRiskActions() {
     [],
   );
 
+  /* ``scanRunId`` is the explicitly selected scan-run context (Phase 14J):
+     it is sent verbatim to the backend, which records the action as an
+     execution of that stage against the run. Never inferred client-side. */
   const assess = useCallback(
-    (findingId: string) =>
-      runAction(setRisk, () => assessRiskApi(findingId)),
+    (findingId: string, scanRunId?: string) =>
+      runAction(setRisk, () => assessRiskApi(findingId, scanRunId)),
     [runAction],
   );
 
   const startSla = useCallback(
-    (findingId: string) =>
-      runAction(setSla, () => createSlaApi(findingId)),
+    (findingId: string, scanRunId?: string) =>
+      runAction(setSla, () => createSlaApi(findingId, scanRunId)),
     [runAction],
   );
 
   const checkSla = useCallback(
-    (findingId: string) =>
-      runAction(setCheck, () => checkSlaApi(findingId)),
+    (findingId: string, scanRunId?: string) =>
+      runAction(setCheck, () => checkSlaApi(findingId, scanRunId)),
     [runAction],
   );
 

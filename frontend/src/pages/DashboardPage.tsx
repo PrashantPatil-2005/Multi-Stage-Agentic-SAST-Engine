@@ -5,6 +5,7 @@ import { CriticalFindings } from "../components/dashboard/CriticalFindings";
 import { MetricCard } from "../components/dashboard/MetricCard";
 import { PipelineOverview } from "../components/dashboard/PipelineOverview";
 import { RecentActivity } from "../components/dashboard/RecentActivity";
+import { RecentScanRuns } from "../components/dashboard/RecentScanRuns";
 import { SlaSummary } from "../components/dashboard/SlaSummary";
 import { VerificationSummary } from "../components/dashboard/VerificationSummary";
 import { Button } from "../components/ui/Button";
@@ -70,6 +71,9 @@ export function DashboardPage({
                   </option>
                 ))}
               </select>
+              <span className="dash-repo-select__hint">
+                (coming soon)
+              </span>
             </label>
           ) : (
             <span className="dash-repo-select__label">No repositories</span>
@@ -177,6 +181,9 @@ export function DashboardPage({
 
           <div className="dash-column" style={{ marginTop: 20 }}>
             <RecentActivity items={summary.recent_activity} />
+            <RecentScanRuns
+              projectNames={new Map(projects.map((p) => [p.id, p.name]))}
+            />
           </div>
         </>
       )}

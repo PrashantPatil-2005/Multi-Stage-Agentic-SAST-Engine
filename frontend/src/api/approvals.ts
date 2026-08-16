@@ -33,6 +33,8 @@ export interface ApprovalRequest {
   reason: string | null;
   action: string;
   version: number;
+  /** Explicit scan-run context the approval workflow was requested against. */
+  scan_run_id?: string | null;
 }
 
 export interface ApprovalEvent {
@@ -137,23 +139,35 @@ export async function submitApprovalDecision(
 }
 
 /** Creates a remediation approval request for a finding through the backend
-    approval workflow. The body mirrors the backend defaults. */
-export async function createApprovalRequest(findingId: string): Promise<ApprovalRequest> {
+    approval workflow. The body mirrors the backend defaults; the optional
+    scan_run_id (Phase 14K) records the APPROVAL stage execution against the
+    explicitly selected run. */
+export async function createApprovalRequest(
+  findingId: string,
+  scanRunId?: string,
+): Promise<ApprovalRequest> {
+  const payload: { action: string; requested_by: string; scan_run_id?: string } = {
+    action: "remediation",
+    requested_by: "system",
+  };
+  if (scanRunId) payload.scan_run_id = scanRunId;
   const response = await fetch(
     `/api/findings/${encodeURIComponent(findingId)}/approval`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "remediation", requested_by: "system" }),
+      body: JSON.stringify(payload),
     },
   );
-  const payload: unknown = await response.json().catch(() => null);
+  const payloadJson: unknown = await response.json().catch(() => null);
   if (!response.ok) {
-    const detail = readableDetail((payload as { detail?: unknown } | null)?.detail);
+    const detail = readableDetail(
+      (payloadJson as { detail?: unknown } | null)?.detail,
+    );
     throw new ApprovalApiError(
       response.status,
       detail || `Approval request failed (HTTP ${response.status}).`,
     );
   }
-  return payload as ApprovalRequest;
+  return payloadJson as ApprovalRequest;
 }

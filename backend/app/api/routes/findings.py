@@ -3,24 +3,32 @@
 GET /api/findings            - enumerate candidate findings enriched with the
                                available risk, SLA, validation, proof and
                                approval records from the in-memory stores.
+                               Optional ``project_id`` scopes the result to
+                               findings owned by one project (resolved via the
+                               explicit scan lineage; 404 for an unknown
+                               project - never a silent global fallback).
 GET /api/findings/{id}       - the complete read-only story of one finding,
-                               composing the same stores plus dedup membership.
+                               composing the same stores plus dedup membership
+                               and authoritative lineage (owning project +
+                               producing scan runs).
 Nothing is mutated; both endpoints are intentionally read-only.
 """
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.api.findings_models import (
     FindingDetail,
     FindingDedupDetail,
     FindingListItem,
+    FindingProject,
     FindingProofDetail,
     FindingSlaDetail,
     FindingSlaInfo,
 )
 from app.approval.store import get_approval_store
+from app.db.models import Project
 from app.dedup.service import all_groups, repo_label_for_file
 from app.prove.store import get_proof_store
 from app.risk.service import (
@@ -29,6 +37,7 @@ from app.risk.service import (
     get_risk_assessment,
     get_sla_record,
 )
+from app.scan.run_store import get_scan_run_store
 from app.validate.store import get_finding_store, get_validation_store
 
 router = APIRouter(prefix="/findings", tags=["findings"])
@@ -51,15 +60,36 @@ def _sla_info(finding_id: str, now: datetime) -> FindingSlaInfo:
     )
 
 
-@router.get("", response_model=list[FindingListItem])
-def list_findings(request: Request) -> list[FindingListItem]:
-    findings = get_finding_store().all()
+def _scoped_findings(request: Request, project_id: str | None) -> list:
+    """Resolve which candidate findings to list.
+
+    Unscoped: every registered finding. Scoped: only findings owned by the
+    project, where ownership is the persisted relationship
+    project -> scan_run -> finding (explicit lineage). An unknown project is
+    a 404 - callers must never fall back to the global list.
+    """
+    if project_id is None:
+        return get_finding_store().all()
+    with request.app.state.session_factory() as session:
+        if session.get(Project, project_id) is None:
+            raise HTTPException(
+                status_code=404, detail=f"project not found: {project_id}"
+            )
+    run_store = get_scan_run_store()
+    finding_ids: set[str] = set()
+    for run in run_store.runs_for_project(project_id):
+        finding_ids.update(run_store.finding_ids_for_run(run.scan_run_id))
+    return [f for f in get_finding_store().all() if f.id in finding_ids]
+
+
+def _list_items(findings: list) -> list[FindingListItem]:
+    """Enrich candidate findings into list rows (shared by both scopes)."""
     if not findings:
         return []
 
-    validations = {v.finding_id: v for v in get_validation_store().all()}
     proofs = {p.finding_id: p for p in get_proof_store().all()}
     risks = {r.finding_id: r for r in all_risk_assessments()}
+    validations = {v.finding_id: v for v in get_validation_store().all()}
     approval_store = get_approval_store()
     now = datetime.now(timezone.utc)
 
@@ -94,6 +124,15 @@ def list_findings(request: Request) -> list[FindingListItem]:
             )
         )
     return items
+
+
+@router.get("", response_model=list[FindingListItem])
+def list_findings(
+    request: Request,
+    project_id: str | None = Query(default=None),
+) -> list[FindingListItem]:
+    """Enumerate findings, optionally scoped to one project's lineage."""
+    return _list_items(_scoped_findings(request, project_id))
 
 
 def _sla_detail(finding_id: str, now: datetime) -> FindingSlaDetail | None:
@@ -151,11 +190,37 @@ def _dedup_detail(finding_id: str) -> FindingDedupDetail | None:
     )
 
 
+def _finding_project(request: Request, project_ids: list[str]) -> FindingProject | None:
+    """Authoritative owning project from the finding's explicit lineage.
+
+    Finding ids are project-scoped, so all lineage records share one
+    project; when that invariant somehow breaks, report the lineage as
+    unavailable instead of guessing (never derived from paths).
+    """
+    if len(project_ids) != 1:
+        return None
+    with request.app.state.session_factory() as session:
+        row = session.get(Project, project_ids[0])
+    if row is None:
+        return None
+    return FindingProject(
+        project_id=row.id,
+        name=row.name,
+        source_type=row.source_type,
+        location=row.location,
+        language=row.language,
+    )
+
+
 @router.get("/{finding_id}", response_model=FindingDetail)
-def get_finding_detail(finding_id: str) -> FindingDetail:
+def get_finding_detail(finding_id: str, request: Request) -> FindingDetail:
     finding = get_finding_store().get(finding_id)
     if finding is None:
         raise HTTPException(status_code=404, detail=f"finding not found: {finding_id}")
+
+    run_store = get_scan_run_store()
+    runs = run_store.runs_for_finding(finding_id)
+    project_ids = sorted({run.project_id for run in runs})
 
     assessment = get_risk_assessment(finding_id)
     validation = get_validation_store().get(finding_id)
@@ -178,4 +243,6 @@ def get_finding_detail(finding_id: str) -> FindingDetail:
         proof=_proof_detail(finding_id),
         approval=approval,
         dedup=_dedup_detail(finding_id),
+        project=_finding_project(request, project_ids),
+        scan_runs=runs,
     )

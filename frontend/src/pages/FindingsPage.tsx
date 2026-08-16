@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { useFindings } from "../hooks/useFindings";
+import { useProject } from "../hooks/useProject";
 import { FindingsEmptyState } from "../components/findings/FindingsEmptyState";
 import {
   ALL,
@@ -57,8 +58,13 @@ function SkeletonCard() {
 }
 
 export function FindingsPage() {
-  const { findings, loading, error, reload } = useFindings();
   const [searchParams, setSearchParams] = useSearchParams();
+  const projectId = useMemo(() => {
+    const value = searchParams.get("project_id");
+    return value !== null && value.trim() !== "" ? value : undefined;
+  }, [searchParams]);
+  const { findings, loading, error, notFound, reload } = useFindings(projectId);
+  const { project } = useProject(projectId);
   const [sort, setSort] = useState<SortState>({ key: "priority", dir: "asc" });
 
   const filterValues: FilterValues = useMemo(
@@ -291,7 +297,31 @@ export function FindingsPage() {
         }
       />
 
-      {!loading && !error ? (
+      {projectId !== undefined && !loading && !error && !notFound ? (
+        <div className="f-scope" role="status">
+          <span className="f-scope__label">Repository:</span>
+          <span className="f-scope__name">
+            {project ? project.name : "Loading\u2026"}
+          </span>
+          <Link className="f-scope__clear" to="/findings">
+            Clear filter
+          </Link>
+        </div>
+      ) : null}
+
+      {notFound ? (
+        <Card>
+          <div className="f-error" role="alert" aria-label="Repository not found">
+            <p className="f-error__text">Repository not found.</p>
+            <Link
+              className="ui-button ui-button--secondary ui-button--md"
+              to="/findings"
+            >
+              View all findings
+            </Link>
+          </div>
+        </Card>
+      ) : !loading && !error ? (
         <Card>
           <div className="f-toolbar">
             <FindingsFilters
@@ -301,7 +331,13 @@ export function FindingsPage() {
             />
           </div>
           {sorted.length === 0 ? (
-            <FindingsEmptyState filtered={findings.length > 0} />
+            projectId !== undefined ? (
+              <p className="f-scope-empty" role="status">
+                0 findings for this repository.
+              </p>
+            ) : (
+              <FindingsEmptyState filtered={findings.length > 0} />
+            )
           ) : (
             <FindingsTable
               findings={sorted}

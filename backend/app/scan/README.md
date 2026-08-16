@@ -5,6 +5,100 @@ produced by PREPARE. No LLM, no regex-only detection, no code execution:
 the engine reasons about **source → propagation → sink** using the Python
 AST extracted from each file's actual source.
 
+## Scan runs (lineage)
+
+Every execution of `POST /api/projects/{id}/scan` records a durable
+`ScanRun` (see `app/scan/run_models.py`) with:
+
+- run status (`running` → `completed`/`failed`), start/end timestamps, real
+  counts (`scanned_file_count`, `total_findings`) and a persisted `error`
+  when a stage fails;
+- one `ScanStageRun` per pipeline stage, in pipeline order: PREPARE,
+  SCAN, DEDUPLICATE, RISK, SLA, VALIDATE, PROVE, APPROVAL. The scan route
+  itself records PREPARE and SCAN; every other stage stays `pending` until
+  its own user-triggered endpoint executes it with an explicit
+  `scan_run_id` context (see "Stage executions" below) — nothing is
+  chained automatically;
+- explicit finding lineage (`scan_findings`): each finding id produced by
+  the run maps back to `project_id → scan_run_id → finding_id`. Rescanning
+  the same project creates a new run; deterministic finding ids may repeat
+  across runs without duplicating Finding records.
+
+The scan executes synchronously; the run record is terminal when the route
+returns. History is served by `GET /api/projects/{id}/scans`,
+`GET /api/scans/{scan_run_id}` and `GET /api/scans/{scan_run_id}/findings`,
+and survives backend restarts (SQLite, see `app/db/persistence.py`).
+
+## Stage executions (Phases 14J/14K)
+
+The pipeline stages are registered per run in order: PREPARE, SCAN,
+DEDUPLICATE, RISK, SLA, VALIDATE, PROVE, APPROVAL. PREPARE and SCAN are
+recorded by the scan route itself; the remaining stages are user-triggered
+per-finding / per-repository endpoints, so their stage records stay
+`pending` unless an explicit `scan_run_id` context is supplied. The optional
+body field `{"scan_run_id": "<real scan run id>"}` is accepted by
+`POST /api/deduplicate`, `POST /api/findings/{id}/risk`,
+`POST /api/findings/{id}/sla`, `POST /api/findings/{id}/sla/check`,
+`POST /api/findings/{id}/validate` (alongside `provider`),
+`POST /api/findings/{id}/prove` and `POST /api/findings/{id}/approval`
+(alongside `action`/`requested_by`):
+
+- the backend validates the context — the run must exist (404) **and** its
+explicit `scan_findings` lineage must produce the finding(s) (400
+otherwise); cross-project fabrication is impossible because membership is
+the persisted relationship, never timestamps/paths/ordering;
+- the stage is then recorded as an explicit execution:
+  `pending → running → completed` (or `failed` with the error persisted);
+- history is append-only (`ScanStageExecution`): every call adds a record,
+  so retrying a failed stage keeps the failed attempt and adds a new one;
+- clients that omit `scan_run_id` behave exactly as before — the action
+  runs with no stage record and no fabricated completion.
+
+Stage semantics (truthful mapping, never fabricated):
+
+- **PREPARE**: recorded `completed` (1 execution) when a run is created — a
+  scan run can only exist for an already-prepared project; its timestamps
+  use the project's real prepare time (`created_at`);
+- **SCAN**: `completed` on report success, `failed` on scanner exception;
+- **DEDUPLICATE**: `completed` when the dedup POST succeeds (including a
+  legitimately empty result); no record when findings are missing (404);
+- **RISK / SLA**: `completed` on a successful per-finding action;
+- **VALIDATE**: `completed` on any successful validation API execution (the
+  verdict — true_positive/false_positive/uncertain — does not change this);
+  `failed` on exception, including provider configuration failure (503);
+- **PROVE**: `completed` for `verified` / `not_verified` / `blocked` — the
+  proof execution itself completed; `failed` for a returned
+  `ProofResult(status="error")` (sandbox timeout, harness failure) and for
+  a gate rejection (409, verdict not true_positive);
+- **APPROVAL**: the request stores its `scan_run_id` and every decision
+  (approve/reject/request-changes/resubmit) inherits it — the reviewer
+  never resends the run. `completed` for a successful request or decision;
+  `failed` for a gate rejection (409) or invalid transition (409).
+
+`completed` means the last recorded execution of the stage succeeded;
+`execution_count` counts every recorded execution (SCAN = 1 per scan;
+DEDUPLICATE = 1 per dedup POST; RISK/SLA = 1 per per-finding action;
+VALIDATE/PROVE = 1 per action; APPROVAL = 1 per request/decision). A stage
+never auto-runs: one action records one execution and no downstream stage
+is ever triggered. The background SLA evaluator updates SLA records only
+and can never mark any scan-run stage as executed.
+
+`GET /api/scans/{scan_run_id}` exposes both the stage statuses and the full
+`executions` history, all persisted and restored on restart.
+
+## Finding identity
+
+Finding ids are deterministic and **project-scoped**:
+`sha256(project_id | vulnerability_type | file | source_line | sink_line)`.
+Rescanning the same project therefore yields the same ids (idempotent),
+while two repositories with identical vulnerable file/line structures
+produce distinct ids and never collide in the shared finding store.
+The `project_id` is taken from the scan request (falling back to the
+`CodeModel.project_id` when the service is called directly). The
+cross-repository dedup fingerprint is deliberately separate — it is
+structural only (see `backend/app/dedup/README.md`) and is unaffected by
+the project-scoped id.
+
 ## Rules
 
 - [SQL injection](#sql-injection) — `backend/app/scan/rules/sql_injection.py`

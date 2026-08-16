@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from app.approval.models import ApprovalRequest
 from app.risk.models import RiskAssessment
 from app.scan.models import SinkRef, SourceRef, TaintStep
+from app.scan.run_models import ScanRun
 from app.validate.models import ValidationResult
 
 
@@ -75,6 +76,20 @@ class FindingProofDetail(BaseModel):
     sandbox_policy: dict | None
 
 
+class FindingProject(BaseModel):
+    """Authoritative project/repository that owns a finding.
+
+    Derived exclusively from the explicit scan lineage (project -> scan run
+    -> finding); never from file paths or repository labels.
+    """
+
+    project_id: str
+    name: str
+    source_type: str
+    location: str
+    language: str
+
+
 class FindingDedupDetail(BaseModel):
     """Deduplication membership for one finding (group view)."""
 
@@ -110,3 +125,8 @@ class FindingDetail(BaseModel):
     proof: FindingProofDetail | None
     approval: ApprovalRequest | None
     dedup: FindingDedupDetail | None
+    #: Authoritative lineage (Phase 14G): owning project plus every scan run
+    #: whose explicit scan_findings lineage produced this finding (newest
+    #: first). Both are derived from persisted relationships only.
+    project: FindingProject | None = None
+    scan_runs: list[ScanRun] = []

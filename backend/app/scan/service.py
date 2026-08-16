@@ -1,10 +1,8 @@
 """ScanService: SCAN stage entry point.
 
 Consumes a ``CodeModel`` (from PREPARE) and returns a ``ScanReport`` with
-candidate findings. Deterministic: the same code model always yields the
-same findings (stable ids, stable ordering).
-
-Not connected to the API yet; designed to be directly testable.
+candidate findings. Deterministic within a project: the same code model
+always yields the same findings (stable project-scoped ids, stable ordering).
 """
 
 import logging
@@ -30,12 +28,17 @@ class ScanService:
             SSRFRule(),
         ]
 
-    def scan(self, code_model: CodeModel) -> ScanReport:
+    def scan(
+        self, code_model: CodeModel, project_id: str | None = None
+    ) -> ScanReport:
+        effective_project_id = (
+            project_id if project_id is not None else code_model.project_id
+        )
         findings: list[CandidateFinding] = []
         summaries: list[FunctionSummary] = []
 
         for rule in self._rules:
-            engine = TaintEngine(rule)
+            engine = TaintEngine(rule, project_id=effective_project_id)
             for code_file in code_model.files:
                 file_findings, file_summaries = engine.analyze_file(code_file)
                 findings.extend(file_findings)

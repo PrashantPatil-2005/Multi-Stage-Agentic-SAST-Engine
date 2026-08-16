@@ -96,13 +96,21 @@ beforeAll(() => {
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes("/api/projects")) return { ok: true, status: 200, json: async () => [] };
-      if (url.includes("/api/findings")) return { ok: true, status: 200, json: async () => [] };
+      if (url.includes("/api/findings")) {
+        if (url !== "/api/findings") {
+          return { ok: false, status: 404, json: async () => ({ detail: "finding not found" }) };
+        }
+        return { ok: true, status: 200, json: async () => [] };
+      }
       if (url.includes("/api/approvals")) return { ok: true, status: 200, json: async () => [] };
       if (url.includes("/api/risk")) return { ok: true, status: 200, json: async () => EMPTY_RISK };
       if (url.includes("/api/validation")) return { ok: true, status: 200, json: async () => EMPTY_VALIDATION };
       if (url.includes("/api/proof")) return { ok: true, status: 200, json: async () => EMPTY_PROOF };
       if (url.includes("/api/benchmarks")) return { ok: true, status: 200, json: async () => EMPTY_BENCHMARK };
       if (url.includes("/api/repositories")) return { ok: true, status: 200, json: async () => EMPTY_REPOSITORIES };
+      if (url.includes("/api/scans")) {
+        return { ok: false, status: 404, json: async () => ({ detail: "scan run not found" }) };
+      }
       return { ok: true, status: 200, json: async () => EMPTY_SUMMARY };
     }),
   );
@@ -221,6 +229,52 @@ describe("theme", () => {
     window.localStorage.setItem("sast.theme", "dark");
     renderApp();
     expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+  });
+});
+
+describe("not-found experience", () => {
+  it("renders an honest not-found state for an unknown route", () => {
+    renderApp("/does-not-exist");
+    expect(
+      screen.getByRole("heading", { name: "Page not found", level: 1 }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/The requested page could not be found/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Return to Dashboard" }),
+    ).toHaveAttribute("href", "/dashboard");
+    expect(
+      screen.getByRole("link", { name: "Go to Findings" }),
+    ).toHaveAttribute("href", "/findings");
+  });
+
+  it("keeps legitimate backend-404 routes (finding detail) working", async () => {
+    renderApp("/findings/some-finding-id");
+    expect(
+      screen.queryByRole("heading", { name: "Page not found" }),
+    ).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("alert", { name: "Finding not found" }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps legitimate backend-404 routes (scan run) working", async () => {
+    renderApp("/scans/does-not-exist");
+    expect(
+      screen.queryByRole("heading", { name: "Page not found" }),
+    ).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("alert", { name: "Scan run not found" }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps valid routes unaffected", () => {
+    renderApp("/dashboard");
+    expect(mainHeading("Overview")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Page not found" }),
+    ).not.toBeInTheDocument();
   });
 });
 

@@ -37,7 +37,9 @@ ValidationResult  (stored separately; the CandidateFinding is never mutated)
 - `providers/` — `LLMProvider` abstraction + `OpenAICompatibleProvider`.
 - `service.py` — `ValidationService.validate(finding)` and
   `validate_report(scan_report)` (sequential batch).
-- `store.py` — in-memory `FindingStore` / `ValidationStore` used by the API.
+- `store.py` — `FindingStore` / `ValidationStore` used by the API (in-memory
+  registry with optional SQLite backing, same convention as the other
+  pipeline stores).
 
 ## Evidence package
 
@@ -133,9 +135,12 @@ POST /api/findings/{finding_id}/validate   body: {"provider": "openai_compatible
 GET  /api/findings/{finding_id}/validation
 ```
 
-Findings are registered in the in-memory `FindingStore` (e.g.
+Findings are registered in the `FindingStore` (e.g.
 `get_finding_store().add_report(report)` after a SCAN run); validation
 results are recorded in `ValidationStore`, kept separate from findings.
+Both stores persist to SQLite when a session factory is configured
+(see `app/db/persistence.py`), so findings and validation results survive a
+backend restart.
 
 ## Limitations
 

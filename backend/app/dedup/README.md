@@ -115,16 +115,23 @@ approximated from the file path since findings do not carry a repository id.
 ## API
 
 - `POST /api/deduplicate` — body `{"finding_ids": [...]}`; looks findings up
-  in the in-memory finding store (404 listing unknown ids), returns a
+  in the finding store (404 listing unknown ids), returns a
   `DeduplicationResult`.
 - `GET /api/deduplication/{fingerprint}` — returns the group from the most
   recent deduplication run (404 when unknown).
+
+## Persistence
+
+Groups are kept in an in-memory registry for fast reads and mirrored into
+SQLite (`deduplication_groups`) when a session factory is configured, so a
+backend restart keeps the latest run's groups (same convention as the other
+pipeline stores; see `app/db/persistence.py`). A new deduplication run
+replaces the persisted groups.
 
 ## Limitations
 
 - Repository identity is approximated from the file path, not from a real
   repository id (findings do not carry one).
-- No persistence: groups live in an in-memory registry until the next run.
 - Literal query text is deliberately not part of the fingerprint, so two
   structurally identical but textually different queries merge (see
   false-merge tradeoff above).

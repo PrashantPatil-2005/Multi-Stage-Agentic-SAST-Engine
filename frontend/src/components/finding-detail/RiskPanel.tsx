@@ -23,11 +23,14 @@ export function RiskPanel({
   onAssess,
   assessing = false,
   riskError = null,
+  disabled = false,
 }: {
   detail: FindingDetail;
   onAssess?: () => void;
   assessing?: boolean;
   riskError?: string | null;
+  /** Disable the action until a scan-run context is selected (Phase 14J). */
+  disabled?: boolean;
 }) {
   const risk = detail.risk;
   const interactive = typeof onAssess === "function";
@@ -47,7 +50,7 @@ export function RiskPanel({
               <Button
                 size="sm"
                 variant="secondary"
-                disabled={assessing}
+                disabled={assessing || disabled}
                 onClick={onAssess}
               >
                 {assessing ? "Assessing Risk\u2026" : "Assess Risk"}

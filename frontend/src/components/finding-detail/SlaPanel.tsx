@@ -17,6 +17,7 @@ export function SlaPanel({
   onCheckSla,
   checking = false,
   checkError = null,
+  disabled = false,
 }: {
   detail: FindingDetail;
   onStartSla?: () => void;
@@ -25,6 +26,8 @@ export function SlaPanel({
   onCheckSla?: () => void;
   checking?: boolean;
   checkError?: string | null;
+  /** Disable the actions until a scan-run context is selected (Phase 14J). */
+  disabled?: boolean;
 }) {
   const sla = detail.sla;
   const risk = detail.risk;
@@ -50,7 +53,7 @@ export function SlaPanel({
                 <Button
                   size="sm"
                   variant="secondary"
-                  disabled={slaLoading}
+                  disabled={slaLoading || disabled}
                   onClick={onStartSla}
                 >
                   {slaLoading ? "Starting SLA\u2026" : "Start SLA"}
@@ -120,7 +123,7 @@ export function SlaPanel({
             <Button
               size="sm"
               variant="secondary"
-              disabled={checking}
+              disabled={checking || disabled}
               onClick={onCheckSla}
             >
               {checking ? "Checking SLA\u2026" : "Check SLA"}

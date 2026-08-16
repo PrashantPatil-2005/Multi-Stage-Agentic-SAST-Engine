@@ -41,9 +41,12 @@ class ScanResponse(BaseModel):
 
     Only summary data is returned; the full findings are available through
     the read-only /api/findings endpoints (registered in the finding store).
+    ``scan_run_id`` identifies the durable ScanRun lineage record for this
+    execution (see /api/scans/{scan_run_id}).
     """
 
     report_id: str
+    scan_run_id: str
     project_id: str
     created_at: datetime
     scanned_file_count: int

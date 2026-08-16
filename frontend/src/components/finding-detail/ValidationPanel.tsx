@@ -10,11 +10,14 @@ export function ValidationPanel({
   onValidate,
   validating = false,
   validateError = null,
+  disabled = false,
 }: {
   detail: FindingDetail;
   onValidate?: () => void;
   validating?: boolean;
   validateError?: string | null;
+  /** Disable the action until a scan-run context is selected (Phase 14K). */
+  disabled?: boolean;
 }) {
   const validation = detail.validation;
   const interactive = typeof onValidate === "function";
@@ -34,7 +37,7 @@ export function ValidationPanel({
               <Button
                 size="sm"
                 variant="secondary"
-                disabled={validating}
+                disabled={validating || disabled}
                 onClick={onValidate}
               >
                 {validating ? "Validating\u2026" : "Validate"}

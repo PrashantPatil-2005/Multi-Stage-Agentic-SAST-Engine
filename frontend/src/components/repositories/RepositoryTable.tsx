@@ -122,7 +122,10 @@ function SlaCell({ row }: { row: RepositorySummary }) {
 function RepositoryName({ row }: { row: RepositorySummary }) {
   return (
     <span className="repo-name">
-      <Link to="/findings" className="repo-name__link">
+      <Link
+        to={`/findings?project_id=${encodeURIComponent(row.project_id)}`}
+        className="repo-name__link"
+      >
         {row.name}
       </Link>
       <span className="repo-name__meta">
@@ -139,12 +142,16 @@ export function RepositoryTable({
   onScan,
   deduplicatingProjectIds,
   onDeduplicate,
+  deletingProjectIds,
+  onDelete,
 }: {
   repositories: RepositorySummary[];
   scanningProjectIds: ReadonlySet<string>;
   onScan: (row: RepositorySummary) => void;
   deduplicatingProjectIds: ReadonlySet<string>;
   onDeduplicate: (row: RepositorySummary) => void;
+  deletingProjectIds: ReadonlySet<string>;
+  onDelete: (row: RepositorySummary) => void;
 }) {
   return (
     <>
@@ -164,6 +171,7 @@ export function RepositoryTable({
               <th scope="col">Created</th>
               <th scope="col">Scan</th>
               <th scope="col">Dedup</th>
+              <th scope="col">Delete</th>
             </tr>
           </thead>
           <tbody>
@@ -227,6 +235,19 @@ export function RepositoryTable({
                     {deduplicatingProjectIds.has(row.project_id)
                       ? "Deduplicating\u2026"
                       : "Deduplicate"}
+                  </Button>
+                </td>
+                <td>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    disabled={deletingProjectIds.has(row.project_id)}
+                    onClick={() => onDelete(row)}
+                    aria-label={`Delete repository ${row.name}`}
+                  >
+                    {deletingProjectIds.has(row.project_id)
+                      ? "Deleting\u2026"
+                      : "Delete"}
                   </Button>
                 </td>
               </tr>
@@ -312,6 +333,17 @@ export function RepositoryTable({
                 {deduplicatingProjectIds.has(row.project_id)
                   ? "Deduplicating\u2026"
                   : "Deduplicate"}
+              </Button>
+              <Button
+                size="sm"
+                variant="danger"
+                disabled={deletingProjectIds.has(row.project_id)}
+                onClick={() => onDelete(row)}
+                aria-label={`Delete repository ${row.name}`}
+              >
+                {deletingProjectIds.has(row.project_id)
+                  ? "Deleting\u2026"
+                  : "Delete"}
               </Button>
             </div>
           </li>

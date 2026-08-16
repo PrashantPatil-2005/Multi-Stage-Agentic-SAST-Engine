@@ -1,6 +1,61 @@
 # Multi-Stage Agentic SAST Engine — Architecture
 
-## 1. System Overview
+> **Status: this document describes the TARGET architecture.** The sections
+> below (diagram, PostgreSQL schema, orchestrator, Alembic, Docker sandbox)
+> describe the design direction, not what runs today. For an accurate
+> description of the current implementation see
+> [**Current Implementation**](#current-implementation) below. Anything not
+> listed there is future work.
+
+## Current Implementation
+
+What actually exists today (source of truth: the code in `backend/` and
+`frontend/`):
+
+- **Pipeline**: eight stages — PREPARE → SCAN → DEDUPLICATE → RISK → SLA →
+  VALIDATE → PROVE → APPROVAL. Stages are **not automatically chained**: the
+  scan route records PREPARE and SCAN only, and DEDUPLICATE, RISK, SLA,
+  VALIDATE, PROVE and APPROVAL are separate user-triggered endpoints. A scan
+  run's stage records for every unexecuted stage stay `pending` until that
+  stage actually runs with an explicit `scan_run_id` context.
+- **Storage**: SQLite via SQLAlchemy (`SAST_DATABASE_URL`, default
+  `sqlite:///./sast.db`). Every pipeline record is stored as a primary key +
+  JSON `payload` of its Pydantic model (see `app/db/models.py` and
+  `app/db/persistence.py`); the Pydantic models remain the contract of
+  record. No Alembic migrations exist (tables are created with
+  `Base.metadata.create_all`). PostgreSQL URLs are engine-supported but not
+  the default or tested deployment.
+- **Scan lineage**: every scan execution records a durable `ScanRun` +
+  per-stage `ScanStageRun` + explicit `scan_findings` lineage
+  (`project → scan_run → finding`). Finding ids are deterministic and
+  project-scoped. Served read-only by `GET /api/projects/{id}/scans`,
+  `GET /api/scans`, `GET /api/scans/{id}` and
+  `GET /api/scans/{id}/findings`.
+- **Repository scoping**: `GET /api/findings?project_id=` returns only the
+  findings owned by a project (via scan lineage; 404 for unknown projects);
+  finding detail includes its owning project and every producing scan run.
+- **LLM providers**: `huggingface` (default) and `openai_compatible` (see
+  `app/validate/providers/`); config via `LLM_*` env vars; `mock` provider
+  for tests. Validation is on-demand only (no auto-validation).
+- **Proof sandbox**: `app/prove/sandbox.py` runs approved in-memory harness
+  templates in a fresh temp workspace with timeouts and output caps — **no
+  Docker**, no network, controlled fixtures only. Findings snippets are data,
+  never executed.
+- **Approval**: in-memory store with SQLite backing; permission state machine
+  (`pending → approved/rejected/changes_requested → pending`), append-only
+  audit events. Reviewer identity is a static demo value
+  (`security-analyst`); there is no authentication.
+- **SLA**: deterministic deadlines + a background `SlaEvaluator` that checks
+  active records on a timer (`SAST_SLA_CHECK_INTERVAL_SECONDS`, default 60s)
+  using the same logic as the manual check endpoint.
+- **Frontend pages**: Overview (dashboard), Findings (with repository scope),
+  Repositories (add/scan/dedup + scan history), Risk & SLA, Validation,
+  Proof, Approvals, Benchmarks, Settings (read-only), Profile (demo
+  identity), Scan Run detail (`/scans/:scanRunId`) and a not-found page.
+- **Benchmark**: Semgrep comparison on controlled fixtures — optional,
+  **not** part of the pipeline.
+
+## 1. Target System Overview
 
 Multi-Stage Agentic SAST Engine: an automated source-code security scanner for interpreted languages (Python first). Four explicit stages — **PREPARE → SCAN → VALIDATE → PROVE** — each is an independent module with a strict Pydantic input/output contract. Pattern-based taint analysis produces *candidate* findings; an LLM validates them against sealed, machine-produced code evidence (never invented evidence) to suppress false positives; confirmed findings receive a safe, non-destructive proof. Findings are deduplicated across repositories, tracked against SLA deadlines, and human-approved before any fix.
 

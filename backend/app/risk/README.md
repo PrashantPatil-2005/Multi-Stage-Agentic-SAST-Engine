@@ -106,15 +106,33 @@ N independent SLA records.
 
 Errors: 404 (missing finding/risk/sla), 422 (naive datetime).
 
+## Background evaluation (automatic breach detection)
+
+SLA records are checked on demand via `POST /api/findings/{id}/sla/check` and
+**automatically** by `app/risk/sla_evaluator.py` (`SlaEvaluator`), which runs
+a small background cycle for the application's lifetime:
+
+- the cycle calls `SlaEvaluator.evaluate_once(now=...)` on a timer
+  (`sla_check_interval_seconds`, default 60s, `SAST_SLA_CHECK_INTERVAL_SECONDS`);
+- it reuses the exact same `SLAService.check_sla` logic as the manual
+  endpoint — the two paths always agree and never double-escalate;
+- non-active records (breached / resolved / `not_applicable`) are skipped;
+- a failing record is logged and skipped, it never aborts the cycle;
+- `evaluate_once` is fully synchronous with an injectable clock, so the
+  behavior is directly testable without sleeps;
+- single-process assumption: one evaluator instance per application process
+  (no distributed locking; appropriate for the current SQLite architecture).
+
 ## Idempotency
 
 Risk assessment, SLA check, SLA resolution and escalation generation are
 safe to call repeatedly: scores/priorities are deterministic, `breached_at`
-and `resolved_at` are set once, and escalation events are never duplicated.
+and `resolved_at` are set once, and escalation events are never duplicated
+— including when the background evaluator and the manual check observe the
+same record.
 
 ## Limitations
 
-- Risk/SLA records live in in-memory stores (no persistence yet).
 - Severity/priority is derived from static analysis + validation/proof
   state; no asset-criticality or real-world exposure data exists, so those
   factors are intentionally absent.

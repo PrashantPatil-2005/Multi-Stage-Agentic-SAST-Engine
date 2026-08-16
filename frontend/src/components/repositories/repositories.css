@@ -368,6 +368,55 @@
   font-size: 13px;
 }
 
+/* Scan history ---------------------------------------------------------------- */
+
+.repo-scan-history {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.repo-scan-history__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.repo-scan-history__title {
+  margin: 0;
+  font-size: 15px;
+}
+
+.repo-scan-history__repo {
+  color: var(--color-text-muted, #777);
+  font-size: 13px;
+  flex: 1;
+}
+
+.repo-scan-history__empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted, #777);
+}
+
+.repo-scan-history__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.repo-scan-history__table th {
+  text-align: left;
+  font-weight: 600;
+  padding: 6px 10px 6px 0;
+  border-bottom: var(--border-width) solid var(--color-border, #ddd);
+}
+
+.repo-scan-history__table td {
+  padding: 6px 10px 6px 0;
+  border-bottom: var(--border-width) solid var(--color-border, #eee);
+}
+
 /* Deduplication result ------------------------------------------------------- */
 
 .repo-dedup__summary {
@@ -420,6 +469,41 @@
 
 .repo-dedup__members a {
   margin-right: 6px;
+}
+
+/* Dedup run context picker --------------------------------------------------- */
+
+.repo-dedup__context-note {
+  margin: 8px 0 8px;
+  font-size: 13px;
+}
+
+.repo-dedup__context-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.repo-dedup__context-label {
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+}
+
+.repo-dedup__context-select {
+  flex: 1 1 220px;
+  max-width: 360px;
+  padding: 6px 8px;
+  font-size: 13px;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.repo-dedup__context-select:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
 }
 
 /* Responsive ---------------------------------------------------------------- */

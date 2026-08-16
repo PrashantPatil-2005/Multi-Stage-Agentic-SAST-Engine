@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { RepositoryList, RepositorySummary } from "../api/repositories";
 import type { FindingListItem } from "../api/findings";
+import type { ScanRun } from "../api/scans";
 import { RepositoriesPage } from "./RepositoriesPage";
 
 const REPO_A: RepositorySummary = {
@@ -167,6 +168,7 @@ const DEDUP_OUT = {
 
 const SCAN_OUT = {
   report_id: "report-2026-0001",
+  scan_run_id: "scan-run-2026-0001",
   project_id: REPO_A.project_id,
   created_at: "2026-08-16T10:00:00Z",
   scanned_file_count: 42,
@@ -174,6 +176,47 @@ const SCAN_OUT = {
   by_type: { sql_injection: 3, command_injection: 2, ssrf: 2 },
   finding_ids: ["fid-sqli-0001", "fid-cmdi-0001", "fid-ssrf-0001"],
 };
+
+const RUN_1: ScanRun = {
+  scan_run_id: "scan-run-2026-0001",
+  project_id: REPO_A.project_id,
+  status: "completed",
+  started_at: "2026-08-16T10:00:00Z",
+  completed_at: "2026-08-16T10:00:05Z",
+  scanned_file_count: 42,
+  total_findings: 3,
+  error: null,
+  created_at: "2026-08-16T10:00:00Z",
+};
+
+const RUN_2: ScanRun = {
+  ...RUN_1,
+  scan_run_id: "scan-run-2026-0002",
+  started_at: "2026-08-16T11:00:00Z",
+  completed_at: "2026-08-16T11:00:04Z",
+};
+
+function scanFinding(id: string) {
+  return {
+    id,
+    vulnerability_type: "sql_injection",
+    severity: "high",
+    confidence: 0.9,
+    status: "candidate",
+    source: { file: "app.py", line: 1, snippet: "", kind: "request_param" },
+    sink: { file: "app.py", line: 2, snippet: "", kind: "sql_execute" },
+    taint_path: [],
+    evidence: {
+      source_snippet: "",
+      sink_snippet: "",
+      taint_path: [],
+      relevant_lines: [],
+      sanitizer_observations: [],
+    },
+  };
+}
+
+const SCAN_FINDINGS = [scanFinding("f-sql-1"), scanFinding("f-sql-2"), scanFinding("f-sql-3")];
 
 interface MockResponse {
   ok: boolean;
@@ -185,12 +228,17 @@ function mockIngestion(options: {
   list: RepositoryList;
   afterCreate?: RepositoryList;
   afterScan?: RepositoryList;
+  scanRuns?: ScanRun[];
   createResponse?: MockResponse;
   createDelayMs?: number;
   scanResponse?: MockResponse;
   scanDelayMs?: number;
+  deleteResponse?: MockResponse;
+  deleteDelayMs?: number;
+  afterDelete?: RepositoryList;
   findingItems?: FindingListItem[];
   projectFiles?: string[];
+  scanRunFindings?: unknown[];
   dedupResponse?: MockResponse;
   dedupResponses?: MockResponse[];
   dedupDelayMs?: number;
@@ -198,6 +246,7 @@ function mockIngestion(options: {
 }) {
   let created = false;
   let scanned = false;
+  let deleted = false;
   let dedupCallCount = 0;
   const files = options.projectFiles ?? ["app.py"];
   const fetchMock = vi.fn(
@@ -239,6 +288,28 @@ function mockIngestion(options: {
       if (
         method === "GET" &&
         url.startsWith("/api/projects/") &&
+        url.endsWith("/scans")
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => options.scanRuns ?? [],
+        };
+      }
+      if (
+        method === "GET" &&
+        url.startsWith("/api/scans/") &&
+        url.endsWith("/findings")
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => options.scanRunFindings ?? SCAN_FINDINGS,
+        };
+      }
+      if (
+        method === "GET" &&
+        url.startsWith("/api/projects/") &&
         !url.endsWith("/scan")
       ) {
         return {
@@ -260,6 +331,16 @@ function mockIngestion(options: {
           }),
         };
       }
+      if (method === "DELETE" && url.startsWith("/api/projects/")) {
+        if (options.deleteDelayMs) {
+          await new Promise((resolve) => setTimeout(resolve, options.deleteDelayMs));
+        }
+        if (options.deleteResponse) {
+          return options.deleteResponse;
+        }
+        deleted = true;
+        return { ok: true, status: 204, json: async () => ({}) };
+      }
       if (method === "POST" && url === "/api/deduplicate") {
         if (options.dedupDelayMs) {
           await new Promise((resolve) => setTimeout(resolve, options.dedupDelayMs));
@@ -275,11 +356,13 @@ function mockIngestion(options: {
       }
       if (method === "GET" && url === "/api/repositories") {
         const list =
-          created && options.afterCreate
-            ? options.afterCreate
-            : scanned && options.afterScan
-              ? options.afterScan
-              : options.list;
+          deleted && options.afterDelete
+            ? options.afterDelete
+            : created && options.afterCreate
+              ? options.afterCreate
+              : scanned && options.afterScan
+                ? options.afterScan
+                : options.list;
         return { ok: true, status: 200, json: async () => list };
       }
       throw new Error(`unexpected request: ${method} ${url}`);
@@ -558,15 +641,32 @@ describe("repositories filters", () => {
 });
 
 describe("repositories navigation", () => {
-  it("links a repository to the findings page", async () => {
+  it("links a repository to its own project-scoped findings", async () => {
     const user = userEvent.setup();
     mockRepositories(listOf(REPO_A));
     renderPage();
     await loaded();
     const link = within(table()).getByRole("link", { name: "web-app" });
-    expect(link).toHaveAttribute("href", "/findings");
+    expect(link).toHaveAttribute(
+      "href",
+      `/findings?project_id=${REPO_A.project_id}`,
+    );
     await user.click(link);
     expect(await screen.findByText("findings-placeholder")).toBeInTheDocument();
+  });
+
+  it("uses the real project id from the backend for repository links", async () => {
+    mockRepositories(listOf(REPO_A, REPO_B));
+    renderPage();
+    await loaded();
+    const links = within(table()).getAllByRole("link", {
+      name: /^(web-app|legacy-api)$/,
+    });
+    const hrefs = links.map((link) => link.getAttribute("href"));
+    expect(hrefs).toEqual([
+      `/findings?project_id=${REPO_A.project_id}`,
+      `/findings?project_id=${REPO_B.project_id}`,
+    ]);
   });
 
   it("links the highest priority finding with its real id", async () => {
@@ -709,6 +809,7 @@ describe("repositories responsive and accessibility", () => {
       "Created",
       "Scan",
       "Dedup",
+      "Delete",
     ]);
     expect(
       screen.getByRole("searchbox", { name: "Search repositories" }),
@@ -830,7 +931,7 @@ describe("repositories onboarding", () => {
     });
   });
 
-  it("closes the modal, shows success and refreshes the list", async () => {
+  it("closes the modal, shows the real PREPARE summary and refreshes the list", async () => {
     const user = userEvent.setup();
     mockIngestion({
       list: listOf(REPO_A),
@@ -846,12 +947,50 @@ describe("repositories onboarding", () => {
     await waitFor(() => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     });
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Repository added successfully.",
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent(
+      "Repository added and prepared: 5 files (4 Python), 0 parse failures.",
     );
     expect(
       await within(table()).findByText("new-repo"),
     ).toBeInTheDocument();
+  });
+
+  it("surfaces real parse failures in the PREPARE summary", async () => {
+    const user = userEvent.setup();
+    const brokenProject = {
+      ...PROJECT_OUT,
+      summary: {
+        ...PROJECT_OUT.summary,
+        fetched_files: 6,
+        python_files: 5,
+        parse_failures: 2,
+      },
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/repositories") {
+        return { ok: true, status: 200, json: async () => listOf(REPO_A) };
+      }
+      if (init?.method === "POST" && url === "/api/projects") {
+        return { ok: true, status: 201, json: async () => brokenProject };
+      }
+      if (url === "/api/projects") {
+        return { ok: true, status: 200, json: async () => [] };
+      }
+      throw new Error(`unexpected request: ${init?.method ?? "GET"} ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderPage();
+    await loaded();
+    await openDialog(user);
+    await fillForm(user, "new-repo", "https://github.com/example/new-repo");
+    await user.click(
+      within(dialog()).getByRole("button", { name: "Add Repository" }),
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Repository added and prepared: 6 files (5 Python), 2 parse failures.",
+    );
   });
 
   it("surfaces backend 400 details and keeps the modal open", async () => {
@@ -1168,6 +1307,50 @@ describe("repositories scan", () => {
     expect(banner).toHaveTextContent("0");
   });
 
+  it("shows the scan history for the scanned repository after a scan", async () => {
+    const user = userEvent.setup();
+    const runs: ScanRun[] = [
+      {
+        scan_run_id: "run-2026-0002",
+        project_id: REPO_A.project_id,
+        status: "completed",
+        started_at: "2026-08-16T11:00:00Z",
+        completed_at: "2026-08-16T11:00:05Z",
+        scanned_file_count: 42,
+        total_findings: 3,
+        error: null,
+        created_at: "2026-08-16T11:00:00Z",
+      },
+      {
+        scan_run_id: "run-2026-0001",
+        project_id: REPO_A.project_id,
+        status: "failed",
+        started_at: "2026-08-16T10:00:00Z",
+        completed_at: "2026-08-16T10:00:02Z",
+        scanned_file_count: null,
+        total_findings: null,
+        error: "simulated scanner failure",
+        created_at: "2026-08-16T10:00:00Z",
+      },
+    ];
+    mockIngestion({ list: listOf(REPO_A), scanRuns: runs });
+    renderPage();
+    await loaded();
+    await runScan(user);
+
+    const history = await screen.findByLabelText("Scan history for web-app");
+    expect(
+      within(history).getByText("Scan History"),
+    ).toBeInTheDocument();
+    expect(within(history).getByLabelText("Scan run run-2026-0002")).toBeInTheDocument();
+    expect(within(history).getByLabelText("Scan run run-2026-0001")).toBeInTheDocument();
+    const rows = within(history).getAllByRole("row");
+    expect(rows).toHaveLength(3);
+    expect(within(history).getByText("completed")).toBeInTheDocument();
+    expect(within(history).getByText("failed")).toBeInTheDocument();
+    expect(within(history).getByText("3")).toBeInTheDocument();
+  });
+
   it("refreshes the repository data after a successful scan", async () => {
     const user = userEvent.setup();
     const onCall = vi.fn<(url: string, init?: RequestInit) => void>();
@@ -1198,13 +1381,18 @@ describe("repositories scan", () => {
     );
   });
 
-  it("navigates to the findings route via View Findings", async () => {
+  it("navigates to the scanned repository's own findings via View Findings", async () => {
     const user = userEvent.setup();
     mockIngestion({ list: listOf(REPO_A) });
     renderPage();
     await loaded();
     await runScan(user);
-    await user.click(screen.getByRole("link", { name: "View Findings" }));
+    const link = screen.getByRole("link", { name: "View Findings" });
+    expect(link).toHaveAttribute(
+      "href",
+      `/findings?project_id=${REPO_A.project_id}`,
+    );
+    await user.click(link);
     expect(await screen.findByText("findings-placeholder")).toBeInTheDocument();
   });
 
@@ -1271,6 +1459,9 @@ describe("repositories scan", () => {
       const path = String(url);
       const allowed =
         (method === "GET" && path === "/api/repositories") ||
+        (method === "GET" &&
+          path.startsWith("/api/projects/") &&
+          path.endsWith("/scans")) ||
         (method === "POST" && path === "/api/projects") ||
         (method === "POST" &&
           path.startsWith("/api/projects/") &&
@@ -1338,19 +1529,15 @@ describe("repositories deduplication", () => {
     expect(dedupButton("legacy-api")).toBeInTheDocument();
   });
 
-  it("resolves the repository's finding ids and posts the exact contract body", async () => {
+  it("resolves the repository's finding ids from the run lineage and posts the exact contract body", async () => {
     const user = userEvent.setup();
     const onCall = vi.fn<(url: string, init?: RequestInit) => void>();
-    mockIngestion({ list: listOf(REPO_A), onCall });
+    mockIngestion({ list: listOf(REPO_A), scanRuns: [RUN_1], onCall });
     renderPage();
     await loaded();
     await runDedup(user);
-    const projectGet = onCall.mock.calls.find(
-      ([url]) => String(url) === `/api/projects/${REPO_A.project_id}`,
-    );
-    expect(projectGet).toBeDefined();
     const findingsGet = onCall.mock.calls.find(
-      ([url]) => String(url) === "/api/findings",
+      ([url]) => String(url) === `/api/scans/${RUN_1.scan_run_id}/findings`,
     );
     expect(findingsGet).toBeDefined();
     const dedupPost = onCall.mock.calls.find(
@@ -1360,12 +1547,45 @@ describe("repositories deduplication", () => {
     );
     expect(dedupPost).toBeDefined();
     const payload = JSON.parse(String(dedupPost?.[1]?.body ?? ""));
-    expect(payload).toEqual({ finding_ids: ["f-sql-1", "f-sql-2", "f-sql-3"] });
+    expect(payload).toEqual({
+      finding_ids: ["f-sql-1", "f-sql-2", "f-sql-3"],
+      scan_run_id: RUN_1.scan_run_id,
+    });
+  });
+
+  it("requires an explicit scan-run selection when a repository has several runs", async () => {
+    const user = userEvent.setup();
+    const onCall = vi.fn<(url: string, init?: RequestInit) => void>();
+    mockIngestion({ list: listOf(REPO_A), scanRuns: [RUN_1, RUN_2], onCall });
+    renderPage();
+    await loaded();
+    await user.click(dedupButton("web-app"));
+    const region = await screen.findByRole("region", {
+      name: "Deduplication run context",
+    });
+    const runButton = within(region).getByRole("button", {
+      name: "Run deduplication",
+    });
+    expect(runButton).toBeDisabled();
+    const select = within(region).getByLabelText("Scan run context");
+    await user.selectOptions(select, RUN_2.scan_run_id);
+    expect(runButton).toBeEnabled();
+    await user.click(runButton);
+    const banner = await screen.findByRole("status");
+    expect(banner).toHaveTextContent("Deduplication completed");
+    const dedupPost = onCall.mock.calls.find(
+      ([url, init]) =>
+        String(url) === "/api/deduplicate" &&
+        (init?.method ?? "").toUpperCase() === "POST",
+    );
+    expect(dedupPost).toBeDefined();
+    const payload = JSON.parse(String(dedupPost?.[1]?.body ?? ""));
+    expect(payload.scan_run_id).toBe(RUN_2.scan_run_id);
   });
 
   it("shows Deduplicating and disables the button while the request is pending", async () => {
     const user = userEvent.setup();
-    mockIngestion({ list: listOf(REPO_A), dedupDelayMs: 80 });
+    mockIngestion({ list: listOf(REPO_A), scanRuns: [RUN_1], dedupDelayMs: 80 });
     renderPage();
     await loaded();
     const button = dedupButton("web-app");
@@ -1380,7 +1600,7 @@ describe("repositories deduplication", () => {
   it("sends only one dedup request when clicked repeatedly", async () => {
     const user = userEvent.setup();
     const onCall = vi.fn<(url: string, init?: RequestInit) => void>();
-    mockIngestion({ list: listOf(REPO_A), dedupDelayMs: 80, onCall });
+    mockIngestion({ list: listOf(REPO_A), scanRuns: [RUN_1], dedupDelayMs: 80, onCall });
     renderPage();
     await loaded();
     const button = dedupButton("web-app");
@@ -1398,7 +1618,7 @@ describe("repositories deduplication", () => {
 
   it("keeps unrelated repositories deduplicable while one is running", async () => {
     const user = userEvent.setup();
-    mockIngestion({ list: listOf(REPO_A, REPO_B), dedupDelayMs: 80 });
+    mockIngestion({ list: listOf(REPO_A, REPO_B), scanRuns: [RUN_1], dedupDelayMs: 80 });
     renderPage();
     await loaded();
     await user.click(dedupButton("web-app"));
@@ -1409,7 +1629,7 @@ describe("repositories deduplication", () => {
 
   it("displays the real dedup result values without deletion language", async () => {
     const user = userEvent.setup();
-    mockIngestion({ list: listOf(REPO_A) });
+    mockIngestion({ list: listOf(REPO_A), scanRuns: [RUN_1] });
     renderPage();
     await loaded();
     await runDedup(user);
@@ -1424,7 +1644,7 @@ describe("repositories deduplication", () => {
 
   it("renders deduplication groups with canonical and related finding links", async () => {
     const user = userEvent.setup();
-    mockIngestion({ list: listOf(REPO_A) });
+    mockIngestion({ list: listOf(REPO_A), scanRuns: [RUN_1] });
     renderPage();
     await loaded();
     await runDedup(user);
@@ -1471,6 +1691,7 @@ describe("repositories deduplication", () => {
     const onCall = vi.fn<(url: string, init?: RequestInit) => void>();
     mockIngestion({
       list: listOf(REPO_A),
+      scanRuns: [RUN_1],
       dedupResponses: [
         {
           ok: false,
@@ -1506,7 +1727,7 @@ describe("repositories deduplication", () => {
   it("triggers no other pipeline stage during deduplication", async () => {
     const user = userEvent.setup();
     const onCall = vi.fn<(url: string, init?: RequestInit) => void>();
-    mockIngestion({ list: listOf(REPO_A), onCall });
+    mockIngestion({ list: listOf(REPO_A), scanRuns: [RUN_1], onCall });
     renderPage();
     await loaded();
     await runDedup(user);
@@ -1523,7 +1744,9 @@ describe("repositories deduplication", () => {
         (method === "GET" &&
           path.startsWith("/api/projects/") &&
           !path.endsWith("/scan")) ||
-        (method === "GET" && path === "/api/findings") ||
+        (method === "GET" &&
+          path.startsWith("/api/scans/") &&
+          path.endsWith("/findings")) ||
         (method === "POST" && path === "/api/deduplicate");
       expect(allowed).toBe(true);
     }
@@ -1558,6 +1781,7 @@ describe("repositories deduplication", () => {
     const user = userEvent.setup();
     mockIngestion({
       list: listOf(REPO_A),
+      scanRuns: [RUN_1],
       dedupResponse: {
         ok: false,
         status: 500,
@@ -1689,3 +1913,203 @@ async function fillOnboardingForm(user: ReturnType<typeof userEvent.setup>) {
     "https://github.com/example/new-repo",
   );
 }
+
+describe("repositories deletion", () => {
+  function deleteButton(name: string) {
+    return within(table()).getByRole("button", {
+      name: `Delete repository ${name}`,
+    });
+  }
+
+  function dialog() {
+    return screen.getByRole("dialog", { name: "Delete repository" });
+  }
+
+  async function openDeleteDialog(
+    user: ReturnType<typeof userEvent.setup>,
+    name = "web-app",
+  ) {
+    await user.click(deleteButton(name));
+  }
+
+  async function confirmDelete(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(
+      within(dialog()).getByRole("button", { name: "Delete Repository" }),
+    );
+  }
+
+  it("exposes a Delete action for every repository row with the repository name", async () => {
+    mockIngestion({ list: listOf(REPO_A, REPO_B) });
+    renderPage();
+    await loaded();
+    expect(deleteButton("web-app")).toBeInTheDocument();
+    expect(deleteButton("legacy-api")).toBeInTheDocument();
+  });
+
+  it("opens a confirmation dialog naming the repository and its data", async () => {
+    const user = userEvent.setup();
+    mockIngestion({ list: listOf(REPO_A) });
+    renderPage();
+    await loaded();
+    await openDeleteDialog(user);
+    expect(dialog()).toBeInTheDocument();
+    expect(dialog()).toHaveAttribute("aria-modal", "true");
+    expect(dialog()).toHaveTextContent("Delete web-app?");
+    expect(dialog()).toHaveTextContent("scan runs and execution history");
+    expect(dialog()).toHaveTextContent("approval records");
+  });
+
+  it("cancel closes the dialog without calling the API", async () => {
+    const user = userEvent.setup();
+    const onCall = vi.fn<(url: string, init?: RequestInit) => void>();
+    mockIngestion({ list: listOf(REPO_A, REPO_B), onCall });
+    renderPage();
+    await loaded();
+    await openDeleteDialog(user);
+    await user.click(within(dialog()).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      onCall.mock.calls.filter(
+        ([, init]) => (init?.method ?? "").toUpperCase() === "DELETE",
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("confirm deletes the real project id, shows a status message and refreshes the list", async () => {
+    const user = userEvent.setup();
+    const onCall = vi.fn<(url: string, init?: RequestInit) => void>();
+    mockIngestion({
+      list: listOf(REPO_A, REPO_B),
+      afterDelete: listOf(REPO_B),
+      onCall,
+    });
+    renderPage();
+    await loaded();
+    await openDeleteDialog(user);
+    await confirmDelete(user);
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent("Repository web-app deleted.");
+    const deleteCall = onCall.mock.calls.find(
+      ([url, init]) =>
+        String(url) === `/api/projects/${REPO_A.project_id}` &&
+        (init?.method ?? "").toUpperCase() === "DELETE",
+    );
+    expect(deleteCall).toBeDefined();
+    expect(deleteCall?.[1]?.body).toBeUndefined();
+    await waitFor(() => {
+      expect(within(table()).queryByText("web-app")).not.toBeInTheDocument();
+    });
+    expect(within(table()).getByText("legacy-api")).toBeInTheDocument();
+  });
+
+  it("surfaces a backend error, keeps the dialog open and allows retry", async () => {
+    const user = userEvent.setup();
+    const onCall = vi.fn<(url: string, init?: RequestInit) => void>();
+    mockIngestion({
+      list: listOf(REPO_A),
+      deleteResponse: {
+        ok: false,
+        status: 404,
+        json: async () => ({
+          detail: `project not found: ${REPO_A.project_id}`,
+        }),
+      },
+      onCall,
+    });
+    renderPage();
+    await loaded();
+    await openDeleteDialog(user);
+    await confirmDelete(user);
+    const alert = await within(dialog()).findByRole("alert");
+    expect(alert).toHaveTextContent(
+      `Unable to delete repository: project not found: ${REPO_A.project_id}`,
+    );
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("sends only one delete request when confirmed repeatedly", async () => {
+    const user = userEvent.setup();
+    const onCall = vi.fn<(url: string, init?: RequestInit) => void>();
+    mockIngestion({
+      list: listOf(REPO_A),
+      deleteDelayMs: 80,
+      onCall,
+    });
+    renderPage();
+    await loaded();
+    await openDeleteDialog(user);
+    await confirmDelete(user);
+    const deleting = await waitFor(() =>
+      within(dialog()).getByRole("button", { name: "Deleting\u2026" }),
+    );
+    expect(deleting).toBeDisabled();
+    await user.click(deleting);
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    const deletePosts = onCall.mock.calls.filter(
+      ([, init]) => (init?.method ?? "").toUpperCase() === "DELETE",
+    );
+    expect(deletePosts).toHaveLength(1);
+  });
+
+  it("closes the dialog on Escape", async () => {
+    const user = userEvent.setup();
+    mockIngestion({ list: listOf(REPO_A) });
+    renderPage();
+    await loaded();
+    await openDeleteDialog(user);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("moves focus into the dialog and restores it to the trigger on close", async () => {
+    const user = userEvent.setup();
+    mockIngestion({ list: listOf(REPO_A) });
+    renderPage();
+    await loaded();
+    const trigger = deleteButton("web-app");
+    await user.click(trigger);
+    expect(within(dialog()).getByRole("button", { name: "Cancel" })).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(trigger).toHaveFocus();
+  });
+
+  it("exposes the Delete action on mobile repository cards", async () => {
+    mockIngestion({ list: listOf(REPO_A) });
+    renderPage();
+    await loaded();
+    const cards = document.querySelector(".repo-cards") as HTMLElement;
+    expect(cards).not.toBeNull();
+    expect(
+      within(cards).getByRole("button", { name: "Delete repository web-app" }),
+    ).toBeInTheDocument();
+  });
+
+  it("contains no filesystem, shell or child-process APIs in the delete code", async () => {
+    const modalSource = readFileSync(
+      "src/components/repositories/DeleteRepositoryModal.tsx",
+      "utf-8",
+    );
+    const tableSource = readFileSync(
+      "src/components/repositories/RepositoryTable.tsx",
+      "utf-8",
+    );
+    const source = modalSource + "\n" + tableSource;
+    for (const forbidden of [
+      "child_process",
+      "spawn",
+      "exec(",
+      "execSync",
+      "node:fs",
+      'require("fs")',
+      "shell",
+      "git clone",
+    ]) {
+      expect(source).not.toContain(forbidden);
+    }
+  });
+});

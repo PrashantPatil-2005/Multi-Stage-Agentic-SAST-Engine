@@ -6,13 +6,23 @@
 import type { ValidationResult } from "./findingDetail";
 import { requestJson } from "./projects";
 
-export function runValidation(findingId: string): Promise<ValidationResult> {
+export function runValidation(
+  findingId: string,
+  scanRunId?: string,
+): Promise<ValidationResult> {
+  /* Optional scan_run_id (Phase 14K): the backend validates the run's
+     explicit lineage and records the VALIDATE stage execution. The provider
+     is always sent; scan_run_id is only added when a run context exists. */
+  const payload: { provider: string; scan_run_id?: string } = {
+    provider: "huggingface",
+  };
+  if (scanRunId) payload.scan_run_id = scanRunId;
   return requestJson<ValidationResult>(
     `/api/findings/${encodeURIComponent(findingId)}/validate`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider: "huggingface" }),
+      body: JSON.stringify(payload),
     },
   );
 }

@@ -1,42 +1,52 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { getFindings } from "../api/findings";
+import { FindingsRequestError, getFindings } from "../api/findings";
 import type { FindingListItem } from "../api/findings";
 
 export interface FindingsState {
   findings: FindingListItem[];
   loading: boolean;
   error: boolean;
+  notFound: boolean;
   reload: () => void;
 }
 
-export function useFindings(): FindingsState {
+/** Loads findings, optionally scoped to one repository (project id). When
+    scoped and the project does not exist, ``notFound`` is set instead of
+    silently falling back to the global list. */
+export function useFindings(projectId?: string): FindingsState {
   const [findings, setFindings] = useState<FindingListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [notFound, setNotFound] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(false);
-    getFindings()
+    setNotFound(false);
+    getFindings(projectId)
       .then((data) => {
         if (cancelled) return;
         setFindings(data);
         setLoading(false);
       })
-      .catch(() => {
+      .catch((reason: unknown) => {
         if (cancelled) return;
-        setError(true);
+        if (reason instanceof FindingsRequestError && reason.status === 404) {
+          setNotFound(true);
+        } else {
+          setError(true);
+        }
         setLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [attempt]);
+  }, [projectId, attempt]);
 
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
 
-  return { findings, loading, error, reload };
+  return { findings, loading, error, notFound, reload };
 }

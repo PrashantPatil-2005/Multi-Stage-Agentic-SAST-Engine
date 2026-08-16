@@ -5,11 +5,14 @@ import { useRepositories } from "../hooks/useRepositories";
 import { useDeduplication } from "../hooks/useDeduplication";
 import type { RepositorySummary } from "../api/repositories";
 import { scanProject, ProjectRequestError } from "../api/projects";
-import type { ScanResponse } from "../api/projects";
+import type { ProjectOut, ScanResponse } from "../api/projects";
+import { formatTimestamp } from "../components/risk/riskHelpers";
 import { AddRepositoryModal } from "../components/repositories/AddRepositoryModal";
+import { DeleteRepositoryModal } from "../components/repositories/DeleteRepositoryModal";
 import { PRIORITIES, RepositoryTable } from "../components/repositories/RepositoryTable";
 import { RepositoryFilters } from "../components/repositories/RepositoryFilters";
 import { RepositorySummary as RepositorySummaryCard } from "../components/repositories/RepositorySummary";
+import { ScanHistory } from "../components/repositories/ScanHistory";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { PageHeader } from "../components/ui/PageHeader";
@@ -43,6 +46,11 @@ const SCAN_TYPE_LABELS: Record<string, string> = {
   ssrf: "SSRF",
 };
 
+// Repository deletion happens inside the confirmation modal, which blocks
+// the page; no row delete is ever in flight, so the table always receives
+// an empty set.
+const NO_DELETES: ReadonlySet<string> = new Set();
+
 function SkeletonRow() {
   return (
     <tr aria-hidden="true">
@@ -66,7 +74,17 @@ export function RepositoriesPage() {
   const [deduplicatingProjectIds, setDeduplicatingProjectIds] = useState<
     ReadonlySet<string>
   >(new Set());
+  const [selectedDedupRun, setSelectedDedupRun] = useState<string>("");
+  const [deleteTarget, setDeleteTarget] = useState<RepositorySummary | null>(
+    null,
+  );
+  const [deletedMessage, setDeletedMessage] = useState<string | null>(null);
   const dedup = useDeduplication();
+
+  const scopedProjectId = useMemo(() => {
+    const value = searchParams.get("project_id");
+    return value !== null && value.trim() !== "" ? value : undefined;
+  }, [searchParams]);
 
   const filterValues: FilterValues = useMemo(
     () => ({
@@ -78,11 +96,18 @@ export function RepositoriesPage() {
   );
 
   const repositories = list?.repositories ?? [];
+  const scopedRepository =
+    scopedProjectId !== undefined
+      ? (repositories.find((row) => row.project_id === scopedProjectId) ?? null)
+      : null;
+  const visibleRepositories = scopedRepository
+    ? [scopedRepository]
+    : repositories;
 
   const filterOptions = useMemo(() => {
     const priorities = new Set<string>();
     const slaStatuses = new Set<string>();
-    for (const row of repositories) {
+    for (const row of visibleRepositories) {
       const highest = row.findings?.highest_priority;
       if (highest !== null && highest !== undefined) {
         priorities.add(highest);
@@ -103,7 +128,7 @@ export function RepositoriesPage() {
 
   const matches = useMemo(() => {
     const q = filterValues.q.trim().toLowerCase();
-    return repositories.filter((row) => {
+    return visibleRepositories.filter((row) => {
       if (
         filterValues.priority !== "" &&
         row.findings?.highest_priority !== filterValues.priority
@@ -133,17 +158,17 @@ export function RepositoriesPage() {
 
   const summary = useMemo(
     () => ({
-      repositoryCount: repositories.length,
-      findingCount: repositories.reduce(
+      repositoryCount: visibleRepositories.length,
+      findingCount: visibleRepositories.reduce(
         (sum, row) => sum + (row.findings?.total ?? 0),
         0,
       ),
-      assessedCount: repositories.filter((row) => row.risk !== null).length,
-      breachCount: repositories.filter(
+      assessedCount: visibleRepositories.filter((row) => row.risk !== null).length,
+      breachCount: visibleRepositories.filter(
         (row) => row.sla !== null && row.sla.breached > 0,
       ).length,
     }),
-    [repositories],
+    [visibleRepositories],
   );
 
   function patchFilters(patch: Partial<FilterValues>) {
@@ -165,9 +190,17 @@ export function RepositoriesPage() {
     setAddOpen(true);
   }
 
-  function handleCreated() {
+  function handleCreated(project: ProjectOut) {
     setAddOpen(false);
-    setAddedMessage("Repository added successfully.");
+    const summary = project.summary;
+    const parseFailures =
+      summary.parse_failures > 0
+        ? `${summary.parse_failures} parse failure${summary.parse_failures === 1 ? "" : "s"}`
+        : "0 parse failures";
+    setAddedMessage(
+      `Repository added and prepared: ${summary.fetched_files} files ` +
+        `(${summary.python_files} Python), ${parseFailures}.`,
+    );
     reload();
   }
 
@@ -211,12 +244,44 @@ export function RepositoriesPage() {
     const projectId = row.project_id;
     if (deduplicatingProjectIds.has(projectId)) return;
     setDeduplicatingProjectIds((prev) => new Set(prev).add(projectId));
-    await dedup.execute(projectId, row.name);
+    setSelectedDedupRun("");
+    await dedup.begin(projectId, row.name);
     setDeduplicatingProjectIds((prev) => {
       const next = new Set(prev);
       next.delete(projectId);
       return next;
     });
+  }
+
+  async function handleConfirmDedup() {
+    if (!dedup.context) return;
+    const scanRunId = selectedDedupRun;
+    if (!scanRunId) return;
+    const projectId = dedup.context.projectId;
+    setDeduplicatingProjectIds((prev) => new Set(prev).add(projectId));
+    setSelectedDedupRun("");
+    await dedup.confirmContext(scanRunId);
+    setDeduplicatingProjectIds((prev) => {
+      const next = new Set(prev);
+      next.delete(projectId);
+      return next;
+    });
+  }
+
+  function handleRequestDelete(row: RepositorySummary) {
+    setAddedMessage(null);
+    setDeletedMessage(null);
+    setDeleteTarget(row);
+  }
+
+  function handleCancelDelete() {
+    setDeleteTarget(null);
+  }
+
+  function handleDeleted(repository: RepositorySummary) {
+    setDeleteTarget(null);
+    setDeletedMessage(`Repository ${repository.name} deleted.`);
+    reload();
   }
 
   return (
@@ -239,6 +304,12 @@ export function RepositoriesPage() {
       {addedMessage ? (
         <p className="repo-added" role="status">
           {addedMessage}
+        </p>
+      ) : null}
+
+      {deletedMessage ? (
+        <p className="repo-added" role="status">
+          {deletedMessage}
         </p>
       ) : null}
 
@@ -278,9 +349,70 @@ export function RepositoriesPage() {
             </p>
           )}
           <div className="repo-scan-result__actions">
-            <Link className="ui-button ui-button--primary" to="/findings">
+            <Link
+              className="ui-button ui-button--primary"
+              to={`/findings?project_id=${encodeURIComponent(lastScan.projectId)}`}
+            >
               View Findings
             </Link>
+          </div>
+        </div>
+      ) : null}
+
+      {lastScan ? (
+        <ScanHistory projectId={lastScan.projectId} projectName={lastScan.repoName} />
+      ) : null}
+
+      {dedup.context ? (
+        <div
+          className="repo-scan-result"
+          role="region"
+          aria-label="Deduplication run context"
+        >
+          <div className="repo-scan-result__head">
+            <span className="repo-scan-result__title">
+              Deduplicate repository
+            </span>
+            <span className="repo-scan-result__repo">{dedup.context.repoName}</span>
+          </div>
+          <p className="repo-dedup__context-note">
+            This repository has multiple scan runs. Choose the scan run to
+            record this deduplication against.
+          </p>
+          <div className="repo-dedup__context-controls">
+            <label
+              className="repo-dedup__context-label"
+              htmlFor="dedup-run-context"
+            >
+              Run context
+            </label>
+            <select
+              id="dedup-run-context"
+              className="repo-dedup__context-select"
+              aria-label="Scan run context"
+              value={selectedDedupRun}
+              onChange={(event) => setSelectedDedupRun(event.target.value)}
+            >
+              <option value="">Select a scan run…</option>
+              {dedup.context.runs.map((run) => (
+                <option key={run.scan_run_id} value={run.scan_run_id}>
+                  {`#${run.scan_run_id.slice(0, 8)} · ${run.status} · ${formatTimestamp(
+                    run.started_at,
+                  )}`}
+                </option>
+              ))}
+            </select>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={selectedDedupRun === ""}
+              onClick={handleConfirmDedup}
+            >
+              Run deduplication
+            </Button>
+            <Button variant="secondary" size="sm" onClick={dedup.cancelContext}>
+              Cancel
+            </Button>
           </div>
         </div>
       ) : null}
@@ -446,6 +578,8 @@ export function RepositoriesPage() {
                 onScan={handleScan}
                 deduplicatingProjectIds={deduplicatingProjectIds}
                 onDeduplicate={handleDeduplicate}
+                deletingProjectIds={NO_DELETES}
+                onDelete={handleRequestDelete}
               />
             )}
           </Card>
@@ -454,6 +588,14 @@ export function RepositoriesPage() {
 
       {addOpen ? (
         <AddRepositoryModal onClose={() => setAddOpen(false)} onCreated={handleCreated} />
+      ) : null}
+
+      {deleteTarget ? (
+        <DeleteRepositoryModal
+          repository={deleteTarget}
+          onClose={handleCancelDelete}
+          onDeleted={handleDeleted}
+        />
       ) : null}
     </>
   );

@@ -23,18 +23,25 @@ describe("profile page", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows the static operator identity", () => {
+  it("shows the static demo reviewer identity", () => {
     renderPage();
     expect(
       screen.getByRole("heading", { name: "Operator", level: 2 }),
     ).toBeInTheDocument();
-    expect(screen.getByText("OP")).toBeInTheDocument();
+    expect(screen.getByText("SA")).toBeInTheDocument();
+    expect(screen.getByText("security-analyst")).toBeInTheDocument();
+    expect(
+      screen.getByText("Demo reviewer identity"),
+    ).toBeInTheDocument();
   });
 
   it("is explicit that no authentication exists", () => {
     renderPage();
     expect(
       screen.getByText(/No authentication or user management is implemented/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/it is not a verified human account/),
     ).toBeInTheDocument();
   });
 

@@ -6,12 +6,13 @@ import {
 } from "react";
 
 import { createProject, ProjectRequestError } from "../../api/projects";
+import type { ProjectOut } from "../../api/projects";
 import { Button } from "../ui/Button";
 import "./add-repository-modal.css";
 
 export interface AddRepositoryModalProps {
   onClose: () => void;
-  onCreated: () => void;
+  onCreated: (project: ProjectOut) => void;
 }
 
 const NAME_MAX_LENGTH = 200;
@@ -84,13 +85,13 @@ export function AddRepositoryModal({
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await createProject({
+      const project = await createProject({
         name: trimmedName,
         source_type: "git",
         location: trimmedUrl,
         language: "python",
       });
-      onCreated();
+      onCreated(project);
     } catch (error) {
       setSubmitError(
         error instanceof ProjectRequestError ? error.message : "request failed",

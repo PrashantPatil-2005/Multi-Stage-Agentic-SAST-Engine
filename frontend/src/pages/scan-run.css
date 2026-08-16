@@ -1,0 +1,226 @@
+/* Scan run detail page styles (Phase 14G). */
+
+.scanrun-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.scanrun-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.scanrun-run-id {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.scanrun-run-id__value {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--color-text);
+  word-break: break-all;
+}
+
+.scanrun-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+.scanrun-detail__item {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 12.5px;
+}
+
+.scanrun-detail__label {
+  flex-shrink: 0;
+  min-width: 120px;
+  color: var(--color-text-muted);
+}
+
+.scanrun-detail__value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scanrun-detail__value--mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.scanrun-repo-link {
+  color: var(--color-primary);
+}
+
+.scanrun-repo-link:hover {
+  text-decoration: underline;
+}
+
+.scanrun-error-text {
+  margin: 12px 0 0;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+  border: var(--border-width) solid
+    color-mix(in srgb, var(--color-danger) 35%, transparent);
+  border-radius: var(--radius-sm);
+  word-break: break-word;
+}
+
+.scanrun-stages-scroll {
+  overflow-x: auto;
+}
+
+.scanrun-stages {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.scanrun-stages th,
+.scanrun-stages td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: var(--border-width) solid var(--color-border);
+  vertical-align: top;
+}
+
+.scanrun-stages td:last-child {
+  max-width: 320px;
+  word-break: break-word;
+}
+
+.scanrun-stages th {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.scanrun-stages__note {
+  margin: 10px 2px 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.scanrun-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.scanrun-history__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  font-size: 12.5px;
+  padding: 6px 8px;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.scanrun-history__stage {
+  font-weight: 700;
+}
+
+.scanrun-history__id {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.scanrun-history__time {
+  color: var(--color-text-muted);
+}
+
+.scanrun-history__error {
+  color: var(--color-danger, #d32f2f);
+}
+
+.scanrun-findings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scanrun-finding {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  background: var(--color-surface-raised);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+}
+
+.scanrun-finding__id {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.scanrun-finding__type {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.scanrun-finding__file {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+}
+
+.scanrun-finding__link {
+  color: var(--color-primary);
+}
+
+.scanrun-finding__link:hover {
+  text-decoration: underline;
+}
+
+.scanrun-findings__empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.scanrun-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 20px 16px;
+}
+
+.scanrun-error__text {
+  margin: 0;
+  font-size: 13.5px;
+}
+
+.scanrun-skeleton {
+  height: 14px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  animation: dash-pulse 1.4s ease-in-out infinite;
+  margin-bottom: 10px;
+}

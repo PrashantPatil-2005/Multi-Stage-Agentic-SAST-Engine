@@ -6,9 +6,20 @@
 import type { FindingProofDetail } from "./findingDetail";
 import { requestJson } from "./projects";
 
-export function proveFinding(findingId: string): Promise<FindingProofDetail> {
+export function proveFinding(
+  findingId: string,
+  scanRunId?: string,
+): Promise<FindingProofDetail> {
+  /* Optional scan_run_id (Phase 14K): the backend validates the run's
+     explicit lineage and records the PROVE stage execution. When absent the
+     body is omitted entirely - the wire contract is unchanged. */
+  const options: RequestInit = { method: "POST" };
+  if (scanRunId) {
+    options.headers = { "Content-Type": "application/json" };
+    options.body = JSON.stringify({ scan_run_id: scanRunId });
+  }
   return requestJson<FindingProofDetail>(
     `/api/findings/${encodeURIComponent(findingId)}/prove`,
-    { method: "POST" },
+    options,
   );
 }

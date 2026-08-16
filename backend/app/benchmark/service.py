@@ -88,6 +88,21 @@ class InvalidFixtureNameError(ValueError):
 
 
 _REPORTS: dict[str, BenchmarkReport] = {}
+_factory = None
+
+
+def set_benchmark_store_factory(factory) -> None:
+    """Rehydrate benchmark reports from the database (lifespan)."""
+    from app.db.models import BenchmarkReportRow
+    from app.db.persistence import db_load_all
+
+    global _factory
+    _factory = factory
+    _REPORTS.clear()
+    for key, report in db_load_all(
+        factory, BenchmarkReportRow, BenchmarkReport, "benchmark_id"
+    ):
+        _REPORTS[key] = report
 
 
 def get_report(benchmark_id: str) -> BenchmarkReport | None:
@@ -101,7 +116,11 @@ def list_reports() -> list[BenchmarkReport]:
 
 
 def clear_reports() -> None:
+    from app.db.models import BenchmarkReportRow
+    from app.db.persistence import db_delete_all
+
     _REPORTS.clear()
+    db_delete_all(_factory, BenchmarkReportRow)
 
 
 class BenchmarkService:
@@ -189,6 +208,10 @@ class BenchmarkService:
             created_at=datetime.now(timezone.utc),
         )
         _REPORTS[benchmark_id] = report
+        from app.db.models import BenchmarkReportRow
+        from app.db.persistence import db_upsert
+
+        db_upsert(_factory, BenchmarkReportRow, "benchmark_id", benchmark_id, report)
         logger.info(
             "benchmark: %s ours=%d semgrep=%s duration=%dms",
             benchmark_id[:12],

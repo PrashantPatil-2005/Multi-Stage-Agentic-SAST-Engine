@@ -5,7 +5,7 @@ import { createApprovalRequest } from "../api/approvals";
 export interface ApprovalRequestState {
   requesting: boolean;
   error: string | null;
-  requestApproval: (findingId: string) => Promise<boolean>;
+  requestApproval: (findingId: string, scanRunId?: string) => Promise<boolean>;
 }
 
 /**
@@ -17,11 +17,17 @@ export function useApprovalRequest(): ApprovalRequestState {
   const [requesting, setRequesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function requestApproval(findingId: string): Promise<boolean> {
+  /* ``scanRunId`` is the explicitly selected scan-run context (Phase 14K):
+     the backend stores it on the approval request and records the APPROVAL
+     execution. Subsequent review decisions inherit that run context. */
+  async function requestApproval(
+    findingId: string,
+    scanRunId?: string,
+  ): Promise<boolean> {
     setRequesting(true);
     setError(null);
     try {
-      await createApprovalRequest(findingId);
+      await createApprovalRequest(findingId, scanRunId);
       return true;
     } catch (err: unknown) {
       const message =

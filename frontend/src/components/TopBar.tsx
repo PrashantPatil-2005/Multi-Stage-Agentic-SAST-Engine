@@ -73,9 +73,9 @@ export function TopBar({ title, onOpenDrawer }: TopBarProps) {
           disabled
         >
           <span className="topbar__avatar" aria-hidden="true">
-            OP
+            SA
           </span>
-          <span className="topbar__profile-name">Operator</span>
+          <span className="topbar__profile-name">security-analyst</span>
         </button>
       </div>
     </header>
