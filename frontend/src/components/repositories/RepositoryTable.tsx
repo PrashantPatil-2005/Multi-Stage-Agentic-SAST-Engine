@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import type { RepositorySummary } from "../../api/repositories";
 import { formatDate, priorityTone } from "../risk/riskHelpers";
 import { Badge } from "../ui/Badge";
+import { Button } from "../ui/Button";
 import { RepositoryStatus } from "./RepositoryStatus";
 
 export const PRIORITIES = ["P0", "P1", "P2", "P3", "P4"];
@@ -134,8 +135,16 @@ function RepositoryName({ row }: { row: RepositorySummary }) {
 
 export function RepositoryTable({
   repositories,
+  scanningProjectIds,
+  onScan,
+  deduplicatingProjectIds,
+  onDeduplicate,
 }: {
   repositories: RepositorySummary[];
+  scanningProjectIds: ReadonlySet<string>;
+  onScan: (row: RepositorySummary) => void;
+  deduplicatingProjectIds: ReadonlySet<string>;
+  onDeduplicate: (row: RepositorySummary) => void;
 }) {
   return (
     <>
@@ -153,6 +162,8 @@ export function RepositoryTable({
               <th scope="col">Proof</th>
               <th scope="col">SLA</th>
               <th scope="col">Created</th>
+              <th scope="col">Scan</th>
+              <th scope="col">Dedup</th>
             </tr>
           </thead>
           <tbody>
@@ -192,6 +203,32 @@ export function RepositoryTable({
                   <SlaCell row={row} />
                 </td>
                 <td>{formatDate(row.created_at)}</td>
+                <td>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={scanningProjectIds.has(row.project_id)}
+                    onClick={() => onScan(row)}
+                    aria-label={`Scan repository ${row.name}`}
+                  >
+                    {scanningProjectIds.has(row.project_id)
+                      ? "Scanning\u2026"
+                      : "Scan"}
+                  </Button>
+                </td>
+                <td>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={deduplicatingProjectIds.has(row.project_id)}
+                    onClick={() => onDeduplicate(row)}
+                    aria-label={`Deduplicate repository ${row.name}`}
+                  >
+                    {deduplicatingProjectIds.has(row.project_id)
+                      ? "Deduplicating\u2026"
+                      : "Deduplicate"}
+                  </Button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -253,6 +290,30 @@ export function RepositoryTable({
                 <dd>{formatDate(row.created_at)}</dd>
               </div>
             </dl>
+            <div className="repo-card__actions">
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={scanningProjectIds.has(row.project_id)}
+                onClick={() => onScan(row)}
+                aria-label={`Scan repository ${row.name}`}
+              >
+                {scanningProjectIds.has(row.project_id)
+                  ? "Scanning\u2026"
+                  : "Scan"}
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={deduplicatingProjectIds.has(row.project_id)}
+                onClick={() => onDeduplicate(row)}
+                aria-label={`Deduplicate repository ${row.name}`}
+              >
+                {deduplicatingProjectIds.has(row.project_id)
+                  ? "Deduplicating\u2026"
+                  : "Deduplicate"}
+              </Button>
+            </div>
           </li>
         ))}
       </ul>

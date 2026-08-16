@@ -1,5 +1,6 @@
 import type { FindingDetail, RiskFactor } from "../../api/findingDetail";
 import { Badge } from "../ui/Badge";
+import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { severityTone } from "../findings/findingsHelpers";
 import { formatTimestamp } from "./detailHelpers";
@@ -17,13 +18,43 @@ function FactorRow({ factor }: { factor: RiskFactor }) {
   );
 }
 
-export function RiskPanel({ detail }: { detail: FindingDetail }) {
+export function RiskPanel({
+  detail,
+  onAssess,
+  assessing = false,
+  riskError = null,
+}: {
+  detail: FindingDetail;
+  onAssess?: () => void;
+  assessing?: boolean;
+  riskError?: string | null;
+}) {
   const risk = detail.risk;
+  const interactive = typeof onAssess === "function";
 
   return (
     <Card title="Risk">
       {!risk ? (
-        <p className="fd-panel__empty">Risk assessment not available</p>
+        <div className="fd-panel__body">
+          <p className="fd-panel__empty">Risk assessment not available</p>
+          {interactive && riskError ? (
+            <p className="fd-panel__error" role="alert">
+              Unable to assess risk: {riskError}
+            </p>
+          ) : null}
+          {interactive ? (
+            <div className="fd-panel__actions">
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={assessing}
+                onClick={onAssess}
+              >
+                {assessing ? "Assessing Risk\u2026" : "Assess Risk"}
+              </Button>
+            </div>
+          ) : null}
+        </div>
       ) : (
         <div className="fd-panel__body">
           <div className="fd-risk__score-row">
@@ -41,6 +72,11 @@ export function RiskPanel({ detail }: { detail: FindingDetail }) {
           <p className="fd-risk__assessed">
             Assessed {formatTimestamp(risk.assessed_at)}
           </p>
+          {interactive ? (
+            <p className="fd-risk__available" role="status">
+              Risk Assessment Available
+            </p>
+          ) : null}
           <h4 className="fd-risk__factors-title">Risk Factors</h4>
           <ul className="fd-factors">
             {risk.factors.map((factor) => (

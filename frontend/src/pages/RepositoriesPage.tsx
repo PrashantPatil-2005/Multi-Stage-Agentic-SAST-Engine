@@ -1,10 +1,15 @@
-import { useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { useRepositories } from "../hooks/useRepositories";
+import { useDeduplication } from "../hooks/useDeduplication";
+import type { RepositorySummary } from "../api/repositories";
+import { scanProject, ProjectRequestError } from "../api/projects";
+import type { ScanResponse } from "../api/projects";
+import { AddRepositoryModal } from "../components/repositories/AddRepositoryModal";
 import { PRIORITIES, RepositoryTable } from "../components/repositories/RepositoryTable";
 import { RepositoryFilters } from "../components/repositories/RepositoryFilters";
-import { RepositorySummary } from "../components/repositories/RepositorySummary";
+import { RepositorySummary as RepositorySummaryCard } from "../components/repositories/RepositorySummary";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { PageHeader } from "../components/ui/PageHeader";
@@ -15,6 +20,28 @@ interface FilterValues {
   priority: string;
   sla: string;
 }
+
+type ScanState =
+  | { status: "scanning" }
+  | { status: "success"; result: ScanResponse }
+  | { status: "error"; detail: string };
+
+interface LastScanInfo {
+  projectId: string;
+  repoName: string;
+  result: ScanResponse;
+}
+
+interface ScanErrorInfo {
+  projectId: string;
+  detail: string;
+}
+
+const SCAN_TYPE_LABELS: Record<string, string> = {
+  sql_injection: "SQL Injection",
+  command_injection: "Command Injection",
+  ssrf: "SSRF",
+};
 
 function SkeletonRow() {
   return (
@@ -31,6 +58,15 @@ function SkeletonRow() {
 export function RepositoriesPage() {
   const { list, loading, error, reload } = useRepositories();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [addOpen, setAddOpen] = useState(false);
+  const [addedMessage, setAddedMessage] = useState<string | null>(null);
+  const [scans, setScans] = useState<Record<string, ScanState>>({});
+  const [lastScan, setLastScan] = useState<LastScanInfo | null>(null);
+  const [scanError, setScanError] = useState<ScanErrorInfo | null>(null);
+  const [deduplicatingProjectIds, setDeduplicatingProjectIds] = useState<
+    ReadonlySet<string>
+  >(new Set());
+  const dedup = useDeduplication();
 
   const filterValues: FilterValues = useMemo(
     () => ({
@@ -124,17 +160,207 @@ export function RepositoriesPage() {
     setSearchParams(next, { replace: true });
   }
 
+  function openAddRepository() {
+    setAddedMessage(null);
+    setAddOpen(true);
+  }
+
+  function handleCreated() {
+    setAddOpen(false);
+    setAddedMessage("Repository added successfully.");
+    reload();
+  }
+
+  const scanningProjectIds = useMemo(
+    () =>
+      new Set(
+        Object.entries(scans)
+          .filter(([, state]) => state.status === "scanning")
+          .map(([projectId]) => projectId),
+      ),
+    [scans],
+  );
+
+  async function handleScan(row: RepositorySummary) {
+    const projectId = row.project_id;
+    if (scanningProjectIds.has(projectId)) return;
+    setScans((prev) => ({ ...prev, [projectId]: { status: "scanning" } }));
+    setScanError(null);
+    try {
+      const result = await scanProject(projectId);
+      setScans((prev) => ({
+        ...prev,
+        [projectId]: { status: "success", result },
+      }));
+      setLastScan({ projectId, repoName: row.name, result });
+      reload();
+    } catch (error) {
+      const detail =
+        error instanceof ProjectRequestError
+          ? error.message
+          : "request failed";
+      setScans((prev) => ({
+        ...prev,
+        [projectId]: { status: "error", detail },
+      }));
+      setScanError({ projectId, detail });
+    }
+  }
+
+  async function handleDeduplicate(row: RepositorySummary) {
+    const projectId = row.project_id;
+    if (deduplicatingProjectIds.has(projectId)) return;
+    setDeduplicatingProjectIds((prev) => new Set(prev).add(projectId));
+    await dedup.execute(projectId, row.name);
+    setDeduplicatingProjectIds((prev) => {
+      const next = new Set(prev);
+      next.delete(projectId);
+      return next;
+    });
+  }
+
   return (
     <>
       <PageHeader
         title="Repositories"
         description="Projects and repositories monitored by the security scanner"
         actions={
-          <Button variant="secondary" onClick={reload} disabled={loading}>
-            Refresh
-          </Button>
+          <>
+            <Button variant="primary" onClick={openAddRepository}>
+              Add Repository
+            </Button>
+            <Button variant="secondary" onClick={reload} disabled={loading}>
+              Refresh
+            </Button>
+          </>
         }
       />
+
+      {addedMessage ? (
+        <p className="repo-added" role="status">
+          {addedMessage}
+        </p>
+      ) : null}
+
+      {scanError ? (
+        <div className="repo-scan-error" role="alert">
+          Unable to scan repository: {scanError.detail}
+        </div>
+      ) : null}
+
+      {lastScan ? (
+        <div className="repo-scan-result" role="status">
+          <div className="repo-scan-result__head">
+            <span className="repo-scan-result__title">Scan completed</span>
+            <span className="repo-scan-result__repo">{lastScan.repoName}</span>
+          </div>
+          <dl className="repo-scan-result__stats">
+            <div>
+              <dt>Files scanned</dt>
+              <dd>{lastScan.result.scanned_file_count}</dd>
+            </div>
+            <div>
+              <dt>Findings</dt>
+              <dd>{lastScan.result.total_findings}</dd>
+            </div>
+          </dl>
+          {lastScan.result.total_findings > 0 ? (
+            <ul className="repo-scan-result__types">
+              {Object.entries(lastScan.result.by_type).map(([type, count]) => (
+                <li key={type}>
+                  {SCAN_TYPE_LABELS[type] ?? type}: {count}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="repo-scan-result__none">
+              Scan completed — no findings detected.
+            </p>
+          )}
+          <div className="repo-scan-result__actions">
+            <Link className="ui-button ui-button--primary" to="/findings">
+              View Findings
+            </Link>
+          </div>
+        </div>
+      ) : null}
+
+      {dedup.noFindings ? (
+        <div className="repo-scan-result" role="status">
+          <p className="repo-dedup__empty">No findings available for deduplication.</p>
+        </div>
+      ) : null}
+
+      {dedup.error ? (
+        <div className="repo-scan-error" role="alert">
+          Unable to deduplicate repository: {dedup.error}
+        </div>
+      ) : null}
+
+      {dedup.result ? (
+        <div className="repo-scan-result" role="status">
+          <div className="repo-scan-result__head">
+            <span className="repo-scan-result__title">
+              Deduplication completed
+            </span>
+            <span className="repo-scan-result__repo">{dedup.repoName}</span>
+          </div>
+          <p className="repo-dedup__summary">
+            {dedup.result.total_findings} findings grouped into{" "}
+            {dedup.result.unique_findings}{" "}
+            {dedup.result.unique_findings === 1
+              ? "deduplication group"
+              : "deduplication groups"}
+            .
+          </p>
+          <p className="repo-dedup__summary">
+            Duplicate occurrences: {dedup.result.duplicate_findings}
+          </p>
+          <ul className="repo-dedup__groups">
+            {dedup.result.groups.map((group) => {
+              const related = group.member_finding_ids.filter(
+                (id) => id !== group.canonical_finding_id,
+              );
+              return (
+                <li key={group.fingerprint} className="repo-dedup__group">
+                  <span className="repo-dedup__type">
+                    {group.vulnerability_type}
+                  </span>
+                  <span
+                    className="repo-dedup__fp"
+                    title={group.fingerprint}
+                  >
+                    {group.fingerprint.slice(0, 16)}
+                    {"\u2026"}
+                  </span>
+                  <span className="repo-dedup__count">
+                    {group.occurrence_count}{" "}
+                    {group.occurrence_count === 1
+                      ? "occurrence"
+                      : "occurrences"}
+                  </span>
+                  <Link
+                    className="repo-dedup__link"
+                    to={`/findings/${group.canonical_finding_id}`}
+                  >
+                    Canonical: {group.canonical_finding_id}
+                  </Link>
+                  {related.length > 0 ? (
+                    <span className="repo-dedup__members">
+                      Related:{" "}
+                      {related.map((id) => (
+                        <Link key={id} to={`/findings/${id}`}>
+                          {id}
+                        </Link>
+                      ))}
+                    </span>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
 
       {loading ? (
         <Card aria-label="Loading repositories">
@@ -182,11 +408,16 @@ export function RepositoriesPage() {
             <p className="repo-empty__text">
               Repositories will appear after projects are registered.
             </p>
+            <div className="repo-empty__cta">
+              <Button variant="primary" onClick={openAddRepository}>
+                Add Repository
+              </Button>
+            </div>
           </div>
         </Card>
       ) : (
         <>
-          <RepositorySummary
+          <RepositorySummaryCard
             repositoryCount={summary.repositoryCount}
             findingCount={summary.findingCount}
             assessedCount={summary.assessedCount}
@@ -209,11 +440,21 @@ export function RepositoriesPage() {
                 No repositories match the current filters.
               </p>
             ) : (
-              <RepositoryTable repositories={matches} />
+              <RepositoryTable
+                repositories={matches}
+                scanningProjectIds={scanningProjectIds}
+                onScan={handleScan}
+                deduplicatingProjectIds={deduplicatingProjectIds}
+                onDeduplicate={handleDeduplicate}
+              />
             )}
           </Card>
         </>
       )}
+
+      {addOpen ? (
+        <AddRepositoryModal onClose={() => setAddOpen(false)} onCreated={handleCreated} />
+      ) : null}
     </>
   );
 }

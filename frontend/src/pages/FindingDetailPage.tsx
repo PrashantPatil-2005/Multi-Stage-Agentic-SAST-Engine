@@ -1,6 +1,9 @@
 import { Link, useParams } from "react-router-dom";
 
 import { useFindingDetail } from "../hooks/useFindingDetail";
+import { useProveFinding } from "../hooks/useProveFinding";
+import { useRiskActions } from "../hooks/useRiskActions";
+import { useValidateFinding } from "../hooks/useValidateFinding";
 import { ApprovalPanel } from "../components/finding-detail/ApprovalPanel";
 import { CodeEvidence } from "../components/finding-detail/CodeEvidence";
 import { DeduplicationPanel } from "../components/finding-detail/DeduplicationPanel";
@@ -54,6 +57,44 @@ function DetailSkeleton() {
 export function FindingDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { detail, loading, notFound, failed, retry } = useFindingDetail(id);
+  const riskActions = useRiskActions();
+  const validateActions = useValidateFinding();
+  const proveActions = useProveFinding();
+
+  async function handleAssessRisk() {
+    if (!detail) return;
+    if (await riskActions.assess(detail.finding_id)) {
+      retry();
+    }
+  }
+
+  async function handleStartSla() {
+    if (!detail) return;
+    if (await riskActions.startSla(detail.finding_id)) {
+      retry();
+    }
+  }
+
+  async function handleCheckSla() {
+    if (!detail) return;
+    if (await riskActions.checkSla(detail.finding_id)) {
+      retry();
+    }
+  }
+
+  async function handleValidateFinding() {
+    if (!detail) return;
+    if (await validateActions.runValidation(detail.finding_id)) {
+      retry();
+    }
+  }
+
+  async function handleProveFinding() {
+    if (!detail) return;
+    if (await proveActions.proveFinding(detail.finding_id)) {
+      retry();
+    }
+  }
 
   if (loading) {
     return <DetailSkeleton />;
@@ -95,13 +136,36 @@ export function FindingDetailPage() {
         <div className="fd-layout__main">
           <FindingPipeline detail={detail} />
           <CodeEvidence detail={detail} />
-          <ValidationPanel detail={detail} />
-          <ProofPanel detail={detail} />
+          <ValidationPanel
+            detail={detail}
+            onValidate={handleValidateFinding}
+            validating={validateActions.validating}
+            validateError={validateActions.error}
+          />
+          <ProofPanel
+            detail={detail}
+            onProve={handleProveFinding}
+            proving={proveActions.proving}
+            proveError={proveActions.error}
+          />
         </div>
         <div className="fd-layout__side">
-          <RiskPanel detail={detail} />
-          <SlaPanel detail={detail} />
-          <ApprovalPanel detail={detail} />
+          <RiskPanel
+            detail={detail}
+            onAssess={handleAssessRisk}
+            assessing={riskActions.risk.loading}
+            riskError={riskActions.risk.error}
+          />
+          <SlaPanel
+            detail={detail}
+            onStartSla={handleStartSla}
+            slaLoading={riskActions.sla.loading}
+            slaError={riskActions.sla.error}
+            onCheckSla={handleCheckSla}
+            checking={riskActions.check.loading}
+            checkError={riskActions.check.error}
+          />
+          <ApprovalPanel detail={detail} onApprovalChanged={retry} />
           <DeduplicationPanel detail={detail} />
           <RawFindingData detail={detail} />
         </div>

@@ -3,6 +3,7 @@
    the source of truth for scores, priorities, SLA state and escalations. */
 
 import { fetchJson } from "./dashboard";
+import { requestJson } from "./projects";
 
 export interface RiskKpi {
   available: boolean;
@@ -95,4 +96,65 @@ export interface RiskSummary {
 
 export function getRiskSummary(): Promise<RiskSummary> {
   return fetchJson<RiskSummary>("/api/risk/summary");
+}
+
+/* Mutation clients. Mirror the backend contracts in
+   app/api/routes/risk.py and app/risk/models.py. The backend calculates
+   every value; the frontend only submits the finding id. */
+
+export interface RiskAssessmentOutput {
+  finding_id: string;
+  vulnerability_type: string;
+  severity: string;
+  risk_score: number;
+  priority: string;
+  factors: RiskFactor[];
+  assessed_at: string;
+  related_finding_ids: string[];
+}
+
+export interface SlaRecordOutput {
+  finding_id: string;
+  priority: string;
+  started_at: string;
+  due_at: string | null;
+  status: string;
+  breached_at: string | null;
+  escalation_level: number;
+  last_checked_at: string | null;
+  resolved_at: string | null;
+}
+
+export interface EscalationEventOutput {
+  finding_id: string;
+  previous_level: number;
+  new_level: number;
+  reason: string;
+  created_at: string;
+}
+
+export interface SlaCheckResultOutput {
+  sla: SlaRecordOutput;
+  escalation: EscalationEventOutput | null;
+}
+
+export function assessRisk(findingId: string): Promise<RiskAssessmentOutput> {
+  return requestJson<RiskAssessmentOutput>(
+    `/api/findings/${encodeURIComponent(findingId)}/risk`,
+    { method: "POST" },
+  );
+}
+
+export function createSla(findingId: string): Promise<SlaRecordOutput> {
+  return requestJson<SlaRecordOutput>(
+    `/api/findings/${encodeURIComponent(findingId)}/sla`,
+    { method: "POST" },
+  );
+}
+
+export function checkSla(findingId: string): Promise<SlaCheckResultOutput> {
+  return requestJson<SlaCheckResultOutput>(
+    `/api/findings/${encodeURIComponent(findingId)}/sla/check`,
+    { method: "POST" },
+  );
 }

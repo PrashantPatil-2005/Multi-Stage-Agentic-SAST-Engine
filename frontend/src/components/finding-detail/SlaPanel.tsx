@@ -1,5 +1,6 @@
 import type { FindingDetail } from "../../api/findingDetail";
 import { Badge } from "../ui/Badge";
+import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { formatSlaRemaining } from "../findings/findingsHelpers";
 import {
@@ -8,13 +9,56 @@ import {
   slaStatusLabel,
 } from "./detailHelpers";
 
-export function SlaPanel({ detail }: { detail: FindingDetail }) {
+export function SlaPanel({
+  detail,
+  onStartSla,
+  slaLoading = false,
+  slaError = null,
+  onCheckSla,
+  checking = false,
+  checkError = null,
+}: {
+  detail: FindingDetail;
+  onStartSla?: () => void;
+  slaLoading?: boolean;
+  slaError?: string | null;
+  onCheckSla?: () => void;
+  checking?: boolean;
+  checkError?: string | null;
+}) {
   const sla = detail.sla;
+  const risk = detail.risk;
+  const interactive = typeof onStartSla === "function" || typeof onCheckSla === "function";
 
   if (!sla) {
     return (
       <Card title="SLA">
-        <p className="fd-panel__empty">No SLA</p>
+        <div className="fd-panel__body">
+          <p className="fd-panel__empty">No SLA</p>
+          {!risk ? (
+            <p className="fd-sla__prereq">
+              Assess risk before starting an SLA.
+            </p>
+          ) : interactive ? (
+            <>
+              {slaError ? (
+                <p className="fd-panel__error" role="alert">
+                  Unable to start SLA: {slaError}
+                </p>
+              ) : null}
+              <div className="fd-panel__actions">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={slaLoading}
+                  onClick={onStartSla}
+                >
+                  {slaLoading ? "Starting SLA\u2026" : "Start SLA"}
+                </Button>
+              </div>
+            </>
+          ) : null}
+        </div>
       </Card>
     );
   }
@@ -65,6 +109,23 @@ export function SlaPanel({ detail }: { detail: FindingDetail }) {
           <p className="fd-sla__remaining">
             {formatSlaRemaining(sla.remaining_seconds)}
           </p>
+        ) : null}
+        {interactive && checkError ? (
+          <p className="fd-panel__error" role="alert">
+            Unable to check SLA: {checkError}
+          </p>
+        ) : null}
+        {interactive ? (
+          <div className="fd-panel__actions">
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={checking}
+              onClick={onCheckSla}
+            >
+              {checking ? "Checking SLA\u2026" : "Check SLA"}
+            </Button>
+          </div>
         ) : null}
       </div>
     </Card>

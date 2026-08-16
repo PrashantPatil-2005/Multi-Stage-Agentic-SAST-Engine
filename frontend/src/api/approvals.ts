@@ -135,3 +135,25 @@ export async function submitApprovalDecision(
   }
   return payload as ApprovalRequest;
 }
+
+/** Creates a remediation approval request for a finding through the backend
+    approval workflow. The body mirrors the backend defaults. */
+export async function createApprovalRequest(findingId: string): Promise<ApprovalRequest> {
+  const response = await fetch(
+    `/api/findings/${encodeURIComponent(findingId)}/approval`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "remediation", requested_by: "system" }),
+    },
+  );
+  const payload: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    const detail = readableDetail((payload as { detail?: unknown } | null)?.detail);
+    throw new ApprovalApiError(
+      response.status,
+      detail || `Approval request failed (HTTP ${response.status}).`,
+    );
+  }
+  return payload as ApprovalRequest;
+}
