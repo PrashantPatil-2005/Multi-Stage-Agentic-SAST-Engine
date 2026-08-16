@@ -1,13 +1,14 @@
 # Multi-Stage Agentic SAST Engine
 
 Automated source-code security scanner for interpreted languages (Python first),
-combining static taint analysis with LLM-assisted validation to reduce false positives.
+combining static taint analysis with LLM-assisted validation to reduce false
+positives.
 
 ## Problem
 
 Pattern-based SAST tools produce high false-positive rates. This engine runs a
-four-stage pipeline where the LLM validates candidate findings against real code
-evidence and confirms exploitability before anything is acted upon.
+seven-stage pipeline where the LLM validates candidate findings against real
+code evidence and confirms exploitability before anything is acted upon.
 
 ## Pipeline
 
@@ -23,14 +24,15 @@ PREPARE → SCAN → DEDUPLICATE → RISK/SLA → VALIDATE → PROVE → HUMAN A
 
 Semgrep benchmarking (`backend/app/benchmark/`) is an **optional evaluation
 path** that compares our engine against Semgrep on controlled fixtures. It is
-NOT part of the production pipeline.
+NOT part of the production pipeline. Benchmark results are fixture-specific and
+are not a claim of real-world accuracy.
 
-## Tech Stack (planned)
+## Tech Stack
 
 - Backend: Python + FastAPI, pytest
 - Analysis: Python AST (CPG-extensible interface)
-- Database: PostgreSQL (SQLite for local dev / tests)
-- LLM: provider-agnostic (OpenAI-compatible, env-configured)
+- Database: SQLite for local dev / tests (PostgreSQL-ready)
+- LLM: provider-agnostic (OpenAI-compatible, env-configured; verified against Hugging Face)
 - Frontend: React + TypeScript + Vite
 - Tooling: Docker Compose, Semgrep baseline comparison
 
@@ -50,7 +52,22 @@ NOT part of the production pipeline.
 - [x] Dashboard overview (frontend; read-only summary API in `backend/app/api/routes/dashboard.py`)
 - [x] Findings list (frontend; read-only API in `backend/app/api/routes/findings.py`)
 
-## Running the PREPARE stage (backend)
+## Known Limitations
+
+- Findings, risk assessments, validation results, proofs, approvals and
+  benchmark reports are stored **in memory per API process**; restarting the
+  backend clears them. Data is not persisted to disk and is not shared between
+  processes.
+- LLM validation requires a live, configured model (see `.env.example`). It is
+  deliberately **not** triggered automatically: each finding is validated on
+  demand so no hidden cloud calls happen during a demo.
+- The proof sandbox must never execute untrusted code on the host; it is
+  designed for controlled fixtures only.
+- Only three vulnerability rules (SQLi, command injection, SSRF) are implemented.
+- Frontend "coming soon" controls (search, repository selector, notifications,
+  profile) are placeholders and are disabled.
+
+## Running the backend
 
 Requirements: Python >= 3.11, git (for git-source ingestion).
 
@@ -63,14 +80,56 @@ uvicorn app.main:app --reload         # http://127.0.0.1:8000
 ```
 
 Configuration is via environment variables / `.env` (see `.env.example`, prefix `SAST_`).
-No secrets are hardcoded.
+No secrets are hardcoded and none are committed.
 
-### API endpoints
+## Running the frontend
+
+Requirements: Node.js + npm.
+
+```powershell
+cd frontend
+npm install
+npm run dev                           # http://127.0.0.1:5173 (proxies /api to :8000)
+```
+
+Production build: `npm run build` (outputs to `frontend/dist/`).
+
+## LLM configuration and smoke test
+
+LLM validation reads `LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`
+and `LLM_TIMEOUT_SECONDS` from the environment or `backend/.env` (see
+`backend/.env.example`). The default provider is Hugging Face
+(`https://router.huggingface.co/v1`), OpenAI-compatible.
+
+A standalone smoke test verifies the configured model end to end without
+starting the server (it never prints the API key):
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe .\smoke_validate_hf.py
+```
+
+## Demo walkthrough
+
+1. Start the backend (`uvicorn app.main:app`) and the frontend (`npm run dev`).
+2. Ingest a repository:
+   `POST /api/projects` with `{"name":"demo","source_type":"directory","location":"<absolute path to backend/tests/fixtures/vulnerable_python_app>"}`.
+3. Run a scan: `POST /api/projects/{id}/scan` — populates findings, risk and SLA.
+4. Open the frontend at http://127.0.0.1:5173 and walk the pipeline pages:
+   Overview → Findings → Repositories → Risk & SLA → Validation → Proof →
+   Approvals → Benchmarks.
+5. (Optional) With `LLM_*` configured, `POST /api/findings/{id}/validate`
+   produces a real LLM verdict; `POST /api/findings/{id}/prove` then proves a
+   `true_positive` finding in the sandbox.
+
+## API endpoints
 
 | Method | Path | Description |
 |---|---|---|
 | POST | `/api/projects` | Ingest a repo (directory / zip / git) and build its ProjectSnapshot |
 | GET | `/api/projects/{id}` | Project metadata + parsed file summary |
+| POST | `/api/projects/{id}/scan` | Run the scanner on a prepared project (populates findings) |
+| GET | `/api/findings` | List findings |
 | POST | `/api/findings/{id}/validate` | LLM-validate a candidate finding (`LLM_*` env config required) |
 | GET | `/api/findings/{id}/validation` | Stored ValidationResult for a finding |
 | POST | `/api/findings/{id}/prove` | Sandboxed proof (only for `true_positive` findings) |
@@ -91,7 +150,8 @@ No secrets are hardcoded.
 | POST | `/api/approvals/{id}/request-changes` | Send back for changes |
 | POST | `/api/approvals/{id}/resubmit` | changes_requested → pending (version + 1) |
 | GET | `/api/approvals/{id}/history` | Append-only audit event trail |
-| POST | `/api/benchmarks/semgrep` | Benchmark our engine vs Semgrep on a controlled fixture (offline; `semgrep` optional) |
+| GET | `/api/benchmarks` | List benchmark reports |
+| POST | `/api/benchmarks/semgrep` | Run our engine vs Semgrep on a controlled fixture (offline; `semgrep` optional) |
 | GET | `/api/benchmarks/{benchmark_id}` | Stored benchmark report |
 | GET | `/api/health` | Health check |
 
@@ -102,6 +162,9 @@ Examples:
 $body = '{"name":"vuln-app","source_type":"directory","location":"C:/Users/Prash/Desktop/SAST/backend/tests/fixtures/vulnerable_python_app"}'
 $resp = Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/projects -ContentType "application/json" -Body $body
 $resp.id
+
+# run a scan on the prepared project
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/projects/$($resp.id)/scan"
 
 # from a zip archive
 Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/projects `
@@ -117,19 +180,24 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/projects `
 Invoke-RestMethod -Method Get -Uri "http://127.0.0.1:8000/api/projects/$($resp.id)"
 ```
 
-### Running the tests
+## Running the tests
 
 ```powershell
 cd backend
-.\.venv\Scripts\python -m pytest        # 340 tests: PREPARE, SCAN (3 rules), DEDUP, RISK/SLA, VALIDATE, PROVE, APPROVAL, BENCHMARK, API
+.\.venv\Scripts\python -m pytest      # full backend suite (offline; no LLM required)
+```
+
+```powershell
+cd frontend
+npx vitest run                         # full frontend suite
 ```
 
 The fixture repository `backend/tests/fixtures/vulnerable_python_app/` contains
-intentionally vulnerable patterns (SQLi, command injection, SSRF) for later SCAN-stage
-testing, plus poison/syntax-error/ignored-dir files to prove the engine never executes
-target code and only ingests relevant files.
+intentionally vulnerable patterns (SQLi, command injection, SSRF) for SCAN-stage
+testing, plus poison/syntax-error/ignored-dir files to prove the engine never
+executes target code and only ingests relevant files.
 
-### What PREPARE produces
+## What PREPARE produces
 
 `POST /api/projects` stores, per project, in `workspace/projects/{id}/`:
 
@@ -141,7 +209,8 @@ target code and only ingests relevant files.
 Security properties: nothing from the target repo is imported or executed;
 ZIP path traversal/symlink/encrypted entries are rejected; extraction is confined to
 the workspace; per-file and aggregate size limits apply; `.git`, `node_modules`,
-`__pycache__`, venvs and similar directories are ignored.
+`__pycache__`, venvs and similar directories are ignored. Git clone error output
+is redacted (credentials never leak into API responses).
 
 ## Architecture
 

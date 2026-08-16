@@ -8,12 +8,31 @@ import { BenchmarkPage } from "./pages/BenchmarkPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { FindingDetailPage } from "./pages/FindingDetailPage";
 import { FindingsPage } from "./pages/FindingsPage";
+import { ProfilePage } from "./pages/ProfilePage";
 import { ProofPage } from "./pages/ProofPage";
 import { RepositoriesPage } from "./pages/RepositoriesPage";
 import { RiskPage } from "./pages/RiskPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { ValidationPage } from "./pages/ValidationPage";
-import { ROUTES, PlaceholderPage } from "./pages/PlaceholderPage";
 import "./styles/shell.css";
+
+interface PageSpec {
+  path: string;
+  title: string;
+}
+
+const PAGES: PageSpec[] = [
+  { path: "/dashboard", title: "Overview" },
+  { path: "/findings", title: "Findings" },
+  { path: "/repositories", title: "Repositories" },
+  { path: "/risk", title: "Risk & SLA" },
+  { path: "/validation", title: "Validation" },
+  { path: "/proof", title: "Proof" },
+  { path: "/approvals", title: "Approvals" },
+  { path: "/benchmarks", title: "Benchmarks" },
+  { path: "/settings", title: "Settings" },
+  { path: "/profile", title: "Profile" },
+];
 
 export default function App() {
   const [collapsed, setCollapsed] = useState(false);
@@ -25,8 +44,8 @@ export default function App() {
     const findingsDetail =
       location.pathname.startsWith("/findings/") &&
       location.pathname !== "/findings";
-    if (findingsDetail) return ROUTES.find((r) => r.path === "/findings")!;
-    return ROUTES.find((r) => r.path === location.pathname) ?? ROUTES[0];
+    if (findingsDetail) return PAGES.find((p) => p.path === "/findings")!;
+    return PAGES.find((p) => p.path === location.pathname) ?? PAGES[0];
   }, [location.pathname]);
 
   /* close the drawer when the route changes (mobile) */
@@ -51,10 +70,7 @@ export default function App() {
     const findingsDetail =
       location.pathname.startsWith("/findings/") &&
       location.pathname !== "/findings";
-    if (
-      !findingsDetail &&
-      !ROUTES.some((r) => r.path === location.pathname)
-    ) {
+    if (!findingsDetail && !PAGES.some((p) => p.path === location.pathname)) {
       navigate("/dashboard", { replace: true });
     }
   }, [location.pathname, navigate]);
@@ -84,36 +100,17 @@ export default function App() {
         <TopBar title={route.title} onOpenDrawer={() => setDrawerOpen(true)} />
         <main className="shell__content">
           <Routes>
+            <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/findings" element={<FindingsPage />} />
             <Route path="/findings/:id" element={<FindingDetailPage />} />
-            <Route path="/approvals" element={<ApprovalsPage />} />
+            <Route path="/repositories" element={<RepositoriesPage />} />
             <Route path="/risk" element={<RiskPage />} />
             <Route path="/validation" element={<ValidationPage />} />
             <Route path="/proof" element={<ProofPage />} />
+            <Route path="/approvals" element={<ApprovalsPage />} />
             <Route path="/benchmarks" element={<BenchmarkPage />} />
-            <Route path="/repositories" element={<RepositoriesPage />} />
-            {ROUTES.filter(
-              (r) =>
-                r.path !== "/findings" &&
-                r.path !== "/approvals" &&
-                r.path !== "/risk" &&
-                r.path !== "/validation" &&
-                r.path !== "/proof" &&
-                r.path !== "/benchmarks" &&
-                r.path !== "/repositories",
-            ).map((r) => (
-              <Route
-                key={r.path}
-                path={r.path}
-                element={
-                  r.path === "/dashboard" ? (
-                    <DashboardPage title={r.title} description={r.description} />
-                  ) : (
-                    <PlaceholderPage route={r} />
-                  )
-                }
-              />
-            ))}
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
           </Routes>
         </main>
       </div>

@@ -1,7 +1,8 @@
 """PREPARE stage API endpoints.
 
-POST /api/projects   - ingest a repository (directory/zip/git) and build its snapshot
-GET  /api/projects/{id} - retrieve project metadata + parsed file summary
+POST /api/projects           - ingest a repository (directory/zip/git) and build its snapshot
+POST /api/projects/{id}/scan - run the existing SCAN stage on a prepared project
+GET  /api/projects/{id}      - retrieve project metadata + parsed file summary
 """
 
 import logging
@@ -11,11 +12,13 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException, Request
 
 from app.api.dashboard_models import DashboardProject
-from app.api.schemas import FileMeta, ProjectDetail, ProjectOut
+from app.api.schemas import FileMeta, ProjectDetail, ProjectOut, ScanResponse
 from app.core.contracts import RepoSpec
 from app.db.models import Project
 from app.prepare.fetcher import FetcherError, SecurityError
 from app.prepare.service import PrepareError, PrepareService
+from app.scan.service import ScanService
+from app.validate.store import get_finding_store
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +41,7 @@ def create_project(payload: RepoSpec, request: Request) -> ProjectOut:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:  # noqa: BLE001 - unexpected failure boundary
         logger.exception("PREPARE failed for project %s", project_id)
-        raise HTTPException(status_code=500, detail=f"prepare failed: {exc}")
+        raise HTTPException(status_code=500, detail="prepare failed")
 
     with request.app.state.session_factory() as session:
         session.add(
@@ -68,6 +71,45 @@ def create_project(payload: RepoSpec, request: Request) -> ProjectOut:
     )
 
 
+@router.post("/{project_id}/scan", response_model=ScanResponse)
+def scan_project(project_id: str, request: Request) -> ScanResponse:
+    """Run the existing SCAN stage on a prepared project's stored CodeModel.
+
+    Reuses the deterministic ScanService unchanged; the resulting findings
+    are registered in the in-memory finding store and become visible through
+    the read-only /api/findings endpoints.
+    """
+    with request.app.state.session_factory() as session:
+        project = session.get(Project, project_id)
+        if project is None:
+            raise HTTPException(
+                status_code=404, detail=f"project not found: {project_id}"
+            )
+    try:
+        code_model = PrepareService.load_code_model(Path(project.snapshot_path))
+    except Exception as exc:  # noqa: BLE001 - unexpected failure boundary
+        logger.exception("cannot load code model for project %s", project_id)
+        raise HTTPException(status_code=500, detail="code model unavailable")
+
+    report = ScanService().scan(code_model)
+    get_finding_store().add_report(report)
+    logger.info(
+        "SCAN complete: project=%s findings=%d by_type=%s",
+        project_id,
+        len(report.findings),
+        report.summary.by_type,
+    )
+    return ScanResponse(
+        report_id=report.id,
+        project_id=project_id,
+        created_at=report.created_at,
+        scanned_file_count=report.scanned_file_count,
+        total_findings=len(report.findings),
+        by_type=report.summary.by_type,
+        finding_ids=[f.id for f in report.findings],
+    )
+
+
 @router.get("", response_model=list[DashboardProject])
 def list_projects(request: Request) -> list[DashboardProject]:
     """List ingested repositories (id + name), newest first."""
@@ -87,7 +129,7 @@ def get_project(project_id: str, request: Request) -> ProjectDetail:
         snapshot = PrepareService.load_snapshot(project_dir)
     except OSError as exc:
         logger.exception("cannot load snapshot for project %s", project_id)
-        raise HTTPException(status_code=500, detail=f"snapshot unavailable: {exc}")
+        raise HTTPException(status_code=500, detail="snapshot unavailable")
 
     files = [
         FileMeta(

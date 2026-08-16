@@ -1,18 +1,6 @@
 /* Approval review queue — professional security operations style.
    Uses design tokens only; no hardcoded colors. */
 
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
-}
-
 .ap-page-skeleton {
   display: flex;
   flex-direction: column;
@@ -33,7 +21,7 @@
 }
 
 .ap-empty {
-  padding: 48px 24px;
+  padding: 40px 24px;
   text-align: center;
   background: var(--color-surface);
   border: var(--border-width) solid var(--color-border);

@@ -50,6 +50,7 @@ export function FindingsTable({
               {SORTABLE.map(({ key, label }) => (
                 <th
                   key={key}
+                  scope="col"
                   aria-sort={
                     sort.key === key
                       ? sort.dir === "asc"
@@ -70,9 +71,9 @@ export function FindingsTable({
                   </button>
                 </th>
               ))}
-              <th>Vulnerability</th>
-              <th className="f-col-flow">Source → Sink</th>
-              <th>Status</th>
+              <th scope="col">Vulnerability</th>
+              <th className="f-col-flow" scope="col">Source → Sink</th>
+              <th scope="col">Status</th>
             </tr>
           </thead>
           <tbody>

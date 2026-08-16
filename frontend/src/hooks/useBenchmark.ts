@@ -14,6 +14,7 @@ export interface BenchmarkState {
   loading: boolean;
   reportLoading: boolean;
   error: boolean;
+  reportError: boolean;
   running: boolean;
   runError: boolean;
   reload: () => void;
@@ -28,6 +29,7 @@ export function useBenchmark(): BenchmarkState {
   const [loading, setLoading] = useState(true);
   const [reportLoading, setReportLoading] = useState(false);
   const [error, setError] = useState(false);
+  const [reportError, setReportError] = useState(false);
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -36,13 +38,15 @@ export function useBenchmark(): BenchmarkState {
   const loadReport = useCallback((id: string) => {
     selectedIdRef.current = id;
     setSelectedId(id);
+    setReportError(false);
     setReportLoading(true);
     return getBenchmarkReport(id)
       .then((data) => {
         setReport(data);
       })
       .catch(() => {
-        setError(true);
+        setReportError(true);
+        setReport(null);
       })
       .finally(() => {
         setReportLoading(false);
@@ -82,10 +86,10 @@ export function useBenchmark(): BenchmarkState {
 
   const selectReport = useCallback(
     (id: string) => {
-      if (id === selectedIdRef.current) return;
+      if (id === selectedIdRef.current && !reportError) return;
       void loadReport(id);
     },
-    [loadReport],
+    [loadReport, reportError],
   );
 
   const runBenchmark = useCallback(async () => {
@@ -113,6 +117,7 @@ export function useBenchmark(): BenchmarkState {
     loading,
     reportLoading,
     error,
+    reportError,
     running,
     runError,
     reload,

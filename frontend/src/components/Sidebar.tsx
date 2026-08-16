@@ -63,7 +63,6 @@ function NavItems({
             className={({ isActive }) =>
               `sidebar__link${isActive ? " sidebar__link--active" : ""}`
             }
-            aria-current="page"
             title={collapsed ? item.label : undefined}
           >
             <span className="sidebar__link-icon">

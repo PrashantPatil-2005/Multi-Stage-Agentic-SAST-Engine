@@ -16,6 +16,7 @@ Security guarantees:
 import fnmatch
 import logging
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -27,6 +28,14 @@ from app.config import Settings
 from app.core.contracts import RepoSpec, SkipInfo
 
 logger = logging.getLogger(__name__)
+
+# Redacts embedded credentials (https://user:token@host/...) so git stderr
+# echoed to clients or logs never leaks a token.
+_URL_CREDENTIALS = re.compile(r"://([^/@:\s]+):([^/@\s]+)@")
+
+
+def _redact_credentials(text: str) -> str:
+    return _URL_CREDENTIALS.sub(r"://<redacted>:<redacted>@", text)
 
 # Directories that are never ingested, matched by name at any depth.
 IGNORED_DIR_NAMES = frozenset(
@@ -248,7 +257,7 @@ class RepoFetcher:
                                f"{self._settings.git_clone_timeout_seconds}s")
         if proc.returncode != 0:
             detail = (proc.stderr or proc.stdout or "").strip()[-500:]
-            raise FetcherError(f"git clone failed: {detail}")
+            raise FetcherError(f"git clone failed: {_redact_credentials(detail)}")
         return self._walk(dest_dir)
 
     # ----------------------------------------------------------------- walk

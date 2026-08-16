@@ -84,8 +84,8 @@ export function factorLabel(name: string): string {
 }
 
 export function priorityTone(priority: string): "danger" | "warning" | "neutral" {
-  if (priority === "P0") return "danger";
-  if (priority === "P1") return "warning";
+  if (priority === "P0" || priority === "P1") return "danger";
+  if (priority === "P2") return "warning";
   return "neutral";
 }
 

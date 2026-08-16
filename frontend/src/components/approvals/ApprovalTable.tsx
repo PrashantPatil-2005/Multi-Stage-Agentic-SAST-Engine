@@ -1,3 +1,4 @@
+import type { KeyboardEvent } from "react";
 import { Link } from "react-router-dom";
 
 import type { ApprovalListItem } from "../../api/approvals";
@@ -51,6 +52,13 @@ export function ApprovalTable({
   onSelect,
   onOpenFinding,
 }: ApprovalTableProps) {
+  const handleRowKeyDown = (item: ApprovalListItem) => (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onOpenFinding(item);
+    }
+  };
+
   return (
     <>
       <div className="ap-table-wrap">
@@ -79,6 +87,8 @@ export function ApprovalTable({
                 key={item.approval_id}
                 className="ap-table__row"
                 onClick={() => onOpenFinding(item)}
+                onKeyDown={handleRowKeyDown(item)}
+                tabIndex={0}
               >
                 <td>
                   <Link
@@ -131,6 +141,8 @@ export function ApprovalTable({
             key={item.approval_id}
             className="ap-card"
             onClick={() => onOpenFinding(item)}
+            onKeyDown={handleRowKeyDown(item)}
+            tabIndex={0}
           >
             <div className="ap-card__head">
               <span

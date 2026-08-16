@@ -27,7 +27,7 @@ export function TopBar({ title, onOpenDrawer }: TopBarProps) {
         >
           <MenuIcon />
         </IconButton>
-        <h1 className="topbar__title">{title}</h1>
+        <span className="topbar__title">{title}</span>
       </div>
 
       <div className="topbar__right">
@@ -40,16 +40,22 @@ export function TopBar({ title, onOpenDrawer }: TopBarProps) {
             className="topbar__search-input"
             placeholder="Search findings\u2026"
             aria-label="Search (coming soon)"
+            disabled
           />
           <span className="topbar__search-hint">Coming soon</span>
         </div>
 
-        <button type="button" className="topbar__select" aria-label="Repository selector (coming soon)">
+        <button
+          type="button"
+          className="topbar__select"
+          aria-label="Repository selector (coming soon)"
+          disabled
+        >
           <span className="topbar__select-text">All repositories</span>
           <span className="topbar__select-caret" aria-hidden="true">&#9662;</span>
         </button>
 
-        <IconButton label="Notifications (coming soon)">
+        <IconButton label="Notifications (coming soon)" disabled>
           <BellIcon />
         </IconButton>
 
@@ -64,6 +70,7 @@ export function TopBar({ title, onOpenDrawer }: TopBarProps) {
           type="button"
           className="topbar__profile"
           aria-label="Profile menu (coming soon)"
+          disabled
         >
           <span className="topbar__avatar" aria-hidden="true">
             OP

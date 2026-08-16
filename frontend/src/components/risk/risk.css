@@ -14,7 +14,7 @@
 
 .risk-layout {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 20px;
   margin-bottom: 20px;
 }
@@ -37,7 +37,7 @@
 /* Distributions -------------------------------------------------------- */
 
 .risk-empty-text {
-  color: var(--ui-text-secondary, #6b7280);
+  color: var(--color-text-muted);
   font-size: 14px;
   margin: 4px 0;
 }
@@ -67,36 +67,36 @@
 
 .risk-bar__label--score {
   display: inline-block;
-  background: var(--ui-bg-muted, #f3f4f6);
-  border: 1px solid var(--ui-border, #e5e7eb);
-  border-radius: 4px;
+  background: var(--color-surface-raised);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
   padding: 2px 8px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--ui-text, #111827);
+  color: var(--color-text);
 }
 
 .risk-bar__text {
   font-size: 13px;
-  color: var(--ui-text-secondary, #6b7280);
+  color: var(--color-text-muted);
 }
 
 .risk-bar__track {
   height: 8px;
-  border-radius: 4px;
-  background: var(--ui-bg-muted, #f3f4f6);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
   overflow: hidden;
 }
 
 .risk-bar__fill {
   height: 100%;
-  border-radius: 4px;
-  background: var(--risk-p0, #dc2626);
+  border-radius: var(--radius-sm);
+  background: var(--color-danger);
   transition: width 0.2s ease;
 }
 
 .risk-bar__fill--score {
-  background: var(--risk-score, #2563eb);
+  background: var(--color-primary);
 }
 
 /* Tables ---------------------------------------------------------------- */
@@ -113,16 +113,19 @@
 
 .risk-table th {
   text-align: left;
+  font-size: 11.5px;
   font-weight: 600;
-  color: var(--ui-text-secondary, #6b7280);
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--ui-border, #e5e7eb);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  padding: 10px 12px;
+  border-bottom: var(--border-width) solid var(--color-border);
   white-space: nowrap;
 }
 
 .risk-table td {
-  padding: 9px 10px;
-  border-bottom: 1px solid var(--ui-border-subtle, #f3f4f6);
+  padding: 10px 12px;
+  border-bottom: var(--border-width) solid var(--color-border);
   vertical-align: middle;
   white-space: nowrap;
 }
@@ -136,24 +139,24 @@
 }
 
 .risk-table__row:hover {
-  background: var(--ui-bg-muted, #f9fafb);
+  background: var(--color-surface-raised);
 }
 
 .risk-table__row:focus-visible {
-  outline: 2px solid var(--ui-focus, #2563eb);
+  outline: 2px solid var(--color-focus);
   outline-offset: -2px;
 }
 
 .risk-table__row--breach {
-  background: var(--risk-breach-bg, #fef2f2);
+  background: color-mix(in srgb, var(--color-danger) 8%, var(--color-surface));
 }
 
 .risk-table__row--breach:hover {
-  background: var(--risk-breach-bg-hover, #fee2e2);
+  background: color-mix(in srgb, var(--color-danger) 14%, var(--color-surface));
 }
 
 .risk-table__link {
-  color: var(--ui-link, #2563eb);
+  color: var(--color-primary);
   text-decoration: none;
   font-weight: 500;
 }
@@ -194,11 +197,7 @@
 /* Breaches ---------------------------------------------------------------- */
 
 .risk-breaches {
-  border-color: var(--risk-breach-border, #fca5a5);
-}
-
-.risk-breaches .ui-card__title::after {
-  content: "";
+  border-color: color-mix(in srgb, var(--color-danger) 35%, transparent);
 }
 
 /* Risk factors ------------------------------------------------------------- */
@@ -206,14 +205,14 @@
 .risk-factors {
   margin-top: 16px;
   padding-top: 12px;
-  border-top: 1px solid var(--ui-border, #e5e7eb);
+  border-top: 1px solid var(--color-border);
 }
 
 .risk-factors__title {
   margin: 0 0 8px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--ui-text-secondary, #6b7280);
+  color: var(--color-text-muted);
 }
 
 .risk-factors__list {
@@ -229,20 +228,20 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: var(--ui-bg-muted, #f3f4f6);
-  border: 1px solid var(--ui-border, #e5e7eb);
-  border-radius: 6px;
+  background: var(--color-surface-raised);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
   padding: 4px 10px;
   font-size: 12px;
 }
 
 .risk-factors__name {
-  color: var(--ui-text, #111827);
+  color: var(--color-text);
   font-weight: 600;
 }
 
 .risk-factors__points {
-  color: var(--ui-text-secondary, #6b7280);
+  color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -270,7 +269,7 @@
   top: 18px;
   bottom: -14px;
   width: 2px;
-  background: var(--ui-border, #e5e7eb);
+  background: var(--color-border);
 }
 
 .risk-timeline__item:last-child::before {
@@ -285,8 +284,8 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: var(--risk-p0, #dc2626);
-  border: 2px solid #fff;
+  background: var(--color-danger);
+  border: 2px solid var(--color-surface);
 }
 
 .risk-timeline__levels {
@@ -297,7 +296,7 @@
 }
 
 .risk-timeline__arrow {
-  color: var(--ui-text-secondary, #6b7280);
+  color: var(--color-text-muted);
 }
 
 .risk-timeline__body {
@@ -308,13 +307,13 @@
 .risk-timeline__reason {
   margin: 0 0 2px;
   font-size: 13px;
-  color: var(--ui-text, #111827);
+  color: var(--color-text);
 }
 
 .risk-timeline__meta {
   margin: 0;
   font-size: 12px;
-  color: var(--ui-text-secondary, #6b7280);
+  color: var(--color-text-muted);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -322,7 +321,7 @@
 
 .risk-timeline__time {
   font-size: 12px;
-  color: var(--ui-text-secondary, #6b7280);
+  color: var(--color-text-muted);
   white-space: nowrap;
   padding-top: 2px;
 }
@@ -346,30 +345,30 @@
 .risk-filter__label {
   font-size: 12px;
   font-weight: 600;
-  color: var(--ui-text-secondary, #6b7280);
+  color: var(--color-text-muted);
 }
 
 .risk-filter__control {
   font: inherit;
   font-size: 13px;
   padding: 6px 8px;
-  border: 1px solid var(--ui-border, #e5e7eb);
-  border-radius: 6px;
-  background: #fff;
-  color: var(--ui-text, #111827);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
   min-width: 140px;
 }
 
 .risk-filter__control:focus-visible {
-  outline: 2px solid var(--ui-focus, #2563eb);
+  outline: 2px solid var(--color-focus);
   outline-offset: 1px;
 }
 
 /* Loading skeletons ---------------------------------------------------------- */
 
 .risk-skeleton {
-  background: var(--ui-bg-muted, #eef0f2);
-  border-radius: 6px;
+  background: var(--color-surface-raised);
+  border-radius: var(--radius-md);
   animation: risk-pulse 1.4s ease-in-out infinite;
 }
 

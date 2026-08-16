@@ -58,7 +58,11 @@ export function DashboardPage({
           projects.length > 0 ? (
             <label className="dash-repo-select">
               <span className="dash-repo-select__label">Repository</span>
-              <select className="dash-repo-select__control" aria-label="Repository">
+              <select
+                className="dash-repo-select__control"
+                aria-label="Repository"
+                disabled
+              >
                 <option value="all">All repositories</option>
                 {projects.map((project) => (
                   <option key={project.id} value={project.id}>

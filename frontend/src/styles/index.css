@@ -10,3 +10,63 @@ pre,
 kbd {
   font-family: var(--font-mono);
 }
+
+/* ------------------------------------------------------------ utilities */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ------------------------------------------------- shared error state */
+
+.dash-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 18px 16px;
+}
+
+.dash-error__text {
+  margin: 0;
+  font-size: 13.5px;
+}
+
+/* --------------------------------------- shared page empty state (card) */
+
+.risk-empty {
+  text-align: center;
+  padding: 40px 16px;
+}
+
+.risk-empty__title {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.risk-empty__text {
+  margin: 0;
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+/* ------------------------------------------------ shared skeleton pulse */
+
+@keyframes dash-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}

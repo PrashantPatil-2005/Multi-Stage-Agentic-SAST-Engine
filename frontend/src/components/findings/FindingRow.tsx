@@ -1,3 +1,4 @@
+import type { KeyboardEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import type { FindingListItem } from "../../api/findings";
@@ -21,9 +22,21 @@ export function FindingRow({ finding }: FindingRowProps) {
   const navigate = useNavigate();
   const status = deriveDisplayStatus(finding);
   const sla = slaStatus(finding);
+  const findingUrl = `/findings/${finding.finding_id}`;
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLTableRowElement>) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      navigate(findingUrl);
+    }
+  };
 
   return (
-    <tr onClick={() => navigate(`/findings/${finding.finding_id}`)}>
+    <tr
+      onClick={() => navigate(findingUrl)}
+      onKeyDown={handleKeyDown}
+      tabIndex={0}
+    >
       <td>
         <Badge tone={priorityTone(finding.priority)}>
           {finding.priority ?? "—"}
@@ -37,7 +50,7 @@ export function FindingRow({ finding }: FindingRowProps) {
       <td className="f-table__cell--wide">
         <Link
           className="f-table__vuln-link"
-          to={`/findings/${finding.finding_id}`}
+          to={findingUrl}
         >
           {vulnLabel(finding.vulnerability_type)}
         </Link>

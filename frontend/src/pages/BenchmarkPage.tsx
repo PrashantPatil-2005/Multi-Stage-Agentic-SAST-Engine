@@ -57,6 +57,7 @@ export function BenchmarkPage() {
     selectedId,
     loading,
     error,
+    reportError,
     running,
     runError,
     reload,
@@ -220,15 +221,39 @@ export function BenchmarkPage() {
             </>
           ) : (
             <>
-              <div className="bmk-section">
-                <KpiGridSkeleton />
-              </div>
-              <div className="bmk-section">
-                <ScannerGridSkeleton />
-              </div>
-              <div className="bmk-section">
-                <TableSkeleton title="Benchmark Comparison" />
-              </div>
+              {reportError ? (
+                <Card>
+                  <div
+                    className="dash-error"
+                    role="alert"
+                    aria-label="Benchmark report error"
+                  >
+                    <p className="dash-error__text">
+                      Unable to load the selected benchmark report.
+                    </p>
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        if (selectedId !== null) selectReport(selectedId);
+                      }}
+                    >
+                      Retry
+                    </Button>
+                  </div>
+                </Card>
+              ) : (
+                <>
+                  <div className="bmk-section">
+                    <KpiGridSkeleton />
+                  </div>
+                  <div className="bmk-section">
+                    <ScannerGridSkeleton />
+                  </div>
+                  <div className="bmk-section">
+                    <TableSkeleton title="Benchmark Comparison" />
+                  </div>
+                </>
+              )}
             </>
           )}
 

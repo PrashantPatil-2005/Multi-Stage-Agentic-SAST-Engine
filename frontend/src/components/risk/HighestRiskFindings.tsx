@@ -53,7 +53,7 @@ export function HighestRiskFindings({ rows }: HighestRiskFindingsProps) {
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr
+<tr
                     key={row.finding_id}
                     className="risk-table__row"
                     onClick={() => openFinding(row.finding_id)}

@@ -155,4 +155,5 @@ def resolve_sla(
 
 @router.get("/{finding_id}/escalations", response_model=list[EscalationEvent])
 def get_escalations(finding_id: str) -> list[EscalationEvent]:
+    _require_finding(finding_id)
     return get_escalation_events(finding_id)

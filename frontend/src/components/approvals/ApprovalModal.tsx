@@ -56,6 +56,7 @@ export function ApprovalModal({
   const meta = KIND_META[kind];
   const [reason, setReason] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<Element | null>(null);
 
   useEffect(() => {
@@ -70,7 +71,27 @@ export function ApprovalModal({
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !submitting) onClose();
+      if (event.key === "Escape" && !submitting) {
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const dialog = dialogRef.current;
+      if (dialog === null) return;
+      const focusable = dialog.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || active === dialog)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || active === dialog)) {
+        event.preventDefault();
+        first.focus();
+      }
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
@@ -96,6 +117,7 @@ export function ApprovalModal({
         aria-modal="true"
         aria-labelledby="approval-modal-title"
         className="ap-modal"
+        ref={dialogRef}
       >
         <h2 id="approval-modal-title" className="ap-modal__title">
           {meta.title}

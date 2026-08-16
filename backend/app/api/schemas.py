@@ -34,3 +34,19 @@ class ProjectOut(BaseModel):
 
 class ProjectDetail(ProjectOut):
     files: list[FileMeta] = Field(default_factory=list)
+
+
+class ScanResponse(BaseModel):
+    """Result of running the existing SCAN stage on a prepared project.
+
+    Only summary data is returned; the full findings are available through
+    the read-only /api/findings endpoints (registered in the finding store).
+    """
+
+    report_id: str
+    project_id: str
+    created_at: datetime
+    scanned_file_count: int
+    total_findings: int
+    by_type: dict[str, int] = Field(default_factory=dict)
+    finding_ids: list[str] = Field(default_factory=list)

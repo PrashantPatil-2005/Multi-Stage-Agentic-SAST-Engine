@@ -11,7 +11,7 @@ export function Card({ title, className = "", children, ...rest }: CardProps) {
     <section className={`ui-card ${className}`} {...rest}>
       {title ? (
         <header className="ui-card__header">
-          <h3 className="ui-card__title">{title}</h3>
+          <h2 className="ui-card__title">{title}</h2>
         </header>
       ) : null}
       <div className="ui-card__body">{children}</div>
