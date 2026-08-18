@@ -838,7 +838,7 @@ def test_approval_terminal_states_are_truthful(validated_client, fixture_repo):
     ).json()
     approval_id = created["id"]
 
-    # invalid transition: approving an already-approved request -> 409 failed
+    # First approval: pending -> approved (completed execution)
     assert (
         client.post(
             f"/api/approvals/{approval_id}/approve",
@@ -846,6 +846,9 @@ def test_approval_terminal_states_are_truthful(validated_client, fixture_repo):
         ).status_code
         == 200
     )
+    # Invalid transition: approve after approve -> 409 rejected BEFORE
+    # recording a stage execution, so the stage history is not polluted
+    # with misleading "failed" records.
     resp = client.post(
         f"/api/approvals/{approval_id}/approve",
         json={"reviewed_by": "security-analyst"},
@@ -853,10 +856,10 @@ def test_approval_terminal_states_are_truthful(validated_client, fixture_repo):
     assert resp.status_code == 409
     assert "invalid approval transition" in resp.json()["detail"]
     stages = _stages(client, run_id)
-    assert stages["APPROVAL"]["status"] == "failed"
-    assert stages["APPROVAL"]["execution_count"] == 3
+    assert stages["APPROVAL"]["status"] == "completed"
+    assert stages["APPROVAL"]["execution_count"] == 2
     executions = _executions_for(client, run_id, "APPROVAL")
-    assert [e["status"] for e in executions] == ["completed", "completed", "failed"]
+    assert [e["status"] for e in executions] == ["completed", "completed"]
     # the underlying state machine is untouched: still approved, version 1
     stored = get_approval_store().get(approval_id)
     assert stored.status == "approved"

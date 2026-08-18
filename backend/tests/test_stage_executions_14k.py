@@ -440,6 +440,8 @@ def test_approval_invalid_transition_records_failed_not_completed(
     )
 
     # approving an already-approved request is an invalid transition
+    # The invalid transition is rejected BEFORE recording a stage execution,
+    # so the stage history is not polluted with misleading "failed" records.
     resp = validated_app.post(
         f"/api/approvals/{created['id']}/approve",
         json={"reviewed_by": "security-analyst"},
@@ -448,13 +450,12 @@ def test_approval_invalid_transition_records_failed_not_completed(
     assert "invalid approval transition" in resp.json()["detail"]
 
     stages = _stages(validated_app, run_id)
-    assert stages["APPROVAL"]["status"] == "failed"
-    assert "invalid approval transition" in stages["APPROVAL"]["error"]
+    assert stages["APPROVAL"]["status"] == "completed"
+    assert stages["APPROVAL"]["execution_count"] == 2
     executions = _executions_for(validated_app, run_id, "APPROVAL")
     assert [e["status"] for e in executions] == [
         "completed",  # request
         "completed",  # first approve
-        "failed",  # invalid second approve
     ]
     # the approval state machine itself is untouched
     stored = get_approval_store().get(created["id"])

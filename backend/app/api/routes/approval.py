@@ -103,6 +103,24 @@ def _transition(
             return _do_transition()
         except InvalidTransitionError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+    # Validate the transition BEFORE recording a stage execution so that
+    # illegal transitions (e.g. reject after approve) do not pollute the
+    # stage history with misleading "failed" records.
+    from app.approval.service import ALLOWED_TRANSITIONS
+
+    _METHOD_TARGET: dict[str, str] = {
+        "approve": "approved",
+        "reject": "rejected",
+        "request_changes": "changes_requested",
+        "resubmit": "pending",
+    }
+    target = _METHOD_TARGET.get(method, method)
+    allowed = ALLOWED_TRANSITIONS.get(request.status, frozenset())
+    if target not in allowed:
+        raise HTTPException(
+            status_code=409,
+            detail=f"invalid approval transition: {request.status} -> {target} is not allowed",
+        )
     try:
         return record_stage_execution(run_id, STAGE_APPROVAL, _do_transition)
     except InvalidTransitionError as exc:
