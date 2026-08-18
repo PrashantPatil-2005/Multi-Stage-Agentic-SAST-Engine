@@ -2095,6 +2095,7 @@ describe("finding risk and SLA workflow safety", () => {
       const allowed =
         (method === "GET" && path === "/api/findings/f-sql-1") ||
         (method === "GET" && path === "/api/findings/f-sql-1/approval") ||
+        (method === "GET" && path === "/api/findings/f-sql-1/remediation") ||
         (method === "GET" && path === "/api/approvals/ap-1/history") ||
         (method === "POST" && path === "/api/findings/f-sql-1/risk") ||
         (method === "POST" && path === "/api/findings/f-sql-1/sla") ||
@@ -2382,6 +2383,7 @@ describe("finding validation workflow safety", () => {
       const allowed =
         (method === "GET" && path === "/api/findings/f-sql-1") ||
         (method === "GET" && path === "/api/findings/f-sql-1/approval") ||
+        (method === "GET" && path === "/api/findings/f-sql-1/remediation") ||
         (method === "GET" && path === "/api/approvals/ap-1/history") ||
         (method === "POST" && path === "/api/findings/f-sql-1/validate");
       expect(allowed).toBe(true);
@@ -2877,6 +2879,7 @@ describe("finding proof workflow safety", () => {
       const allowed =
         (method === "GET" && path === "/api/findings/f-sql-1") ||
         (method === "GET" && path === "/api/findings/f-sql-1/approval") ||
+        (method === "GET" && path === "/api/findings/f-sql-1/remediation") ||
         (method === "GET" && path === "/api/approvals/ap-1/history") ||
         (method === "POST" && path === "/api/findings/f-sql-1/prove");
       expect(allowed).toBe(true);
@@ -3811,6 +3814,7 @@ describe("finding approval workflow safety", () => {
       const allowed =
         (method === "GET" && path === "/api/findings/f-sql-1") ||
         (method === "GET" && path === "/api/findings/f-sql-1/approval") ||
+        (method === "GET" && path === "/api/findings/f-sql-1/remediation") ||
         (method === "GET" && path === "/api/approvals/ap-9/history") ||
         (method === "POST" && path === "/api/findings/f-sql-1/approval") ||
         (method === "POST" && path === "/api/approvals/ap-9/approve");
@@ -3897,5 +3901,367 @@ describe("finding approval workflow safety", () => {
       await within(history).findByText("Pending \u2192 Approved"),
     ).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
+/* ----------------------------------------------------- remediation */
+
+const PROPOSAL_OUT = {
+  finding_id: "f-sql-1",
+  vulnerability_type: "sql_injection",
+  file: "users.py",
+  line: 27,
+  strategy: "parameterize_query",
+  before: "    cursor.execute(query)",
+  after: '    cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))',
+  import_to_add: null,
+  rationale:
+    "Parameterized query: interpolated values are passed as query parameters instead of being embedded in the SQL text, so user input can no longer alter the statement structure.",
+};
+
+const REMEDIATION_PROPOSED = {
+  finding_id: "f-sql-1",
+  approval_id: "ap-1",
+  status: "proposed",
+  proposal: PROPOSAL_OUT,
+  applied_at: null,
+  applied_by: null,
+  verified_at: null,
+  verification: null,
+  error: null,
+  created_at: "2026-08-15T12:00:00Z",
+};
+
+const REMEDIATION_APPLIED = {
+  ...REMEDIATION_PROPOSED,
+  status: "applied",
+  applied_at: "2026-08-15T12:05:00Z",
+  applied_by: "security-analyst",
+};
+
+const REMEDIATION_VERIFIED = {
+  ...REMEDIATION_APPLIED,
+  status: "verified",
+  verified_at: "2026-08-15T12:30:00Z",
+  verification: "verified",
+};
+
+const REMEDIATION_STILL_PRESENT = {
+  ...REMEDIATION_APPLIED,
+  status: "still_present",
+  verified_at: "2026-08-15T12:30:00Z",
+  verification: "still_present",
+};
+
+const REMEDIATION_NO_FIX = {
+  finding_id: "f-sql-1",
+  approval_id: "ap-1",
+  status: "no_fix_available",
+  proposal: {
+    finding_id: "f-sql-1",
+    vulnerability_type: "ssrf",
+    file: "users.py",
+    line: 40,
+    strategy: "no_automatic_fix",
+    before: 'requests.get(url)',
+    after: 'requests.get(url)',
+    import_to_add: null,
+    rationale:
+      "no deterministic automatic fix is defined for ssrf; manual remediation is required",
+  },
+  applied_at: null,
+  applied_by: null,
+  verified_at: null,
+  verification: null,
+  error: null,
+  created_at: "2026-08-15T12:00:00Z",
+};
+
+function remediationDetail(
+  remediation: unknown,
+  approvalStatus: "approved" | "pending" = "approved",
+) {
+  return detail({
+    approval: {
+      ...detail({}).approval!,
+      status: approvalStatus,
+      action: "remediation",
+    },
+    remediation: remediation as FindingDetail["remediation"],
+    project: {
+      project_id: "proj-1",
+      name: "repo-a",
+      source_type: "directory",
+      location: "/tmp/repo-a",
+      language: "python",
+    },
+  });
+}
+
+function mockRemediationFlow(options: {
+  initialRecord?: unknown;
+  detailPayload?: FindingDetail;
+  proposalResponse?: MockResponse;
+  applyResponse?: MockResponse;
+  verifyResponse?: MockResponse;
+  reprepareResponse?: MockResponse;
+  onCall?: (url: string, init?: RequestInit) => void;
+}) {
+  let record = options.initialRecord ?? null;
+  const fetchMock = vi.fn(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      options.onCall?.(url, init);
+      const payload = options.detailPayload ?? remediationDetail(record);
+      if (method === "GET" && url === "/api/findings/f-sql-1") {
+        return { ok: true, status: 200, json: async () => payload };
+      }
+      if (method === "GET" && url === "/api/findings/f-sql-1/approval") {
+        return { ok: true, status: 200, json: async () => (payload as FindingDetail).approval };
+      }
+      if (method === "GET" && url === "/api/approvals/ap-1/history") {
+        return { ok: true, status: 200, json: async () => APPROVAL_HISTORY };
+      }
+      if (method === "GET" && url === "/api/findings/f-sql-1/remediation") {
+        if (record) {
+          return { ok: true, status: 200, json: async () => record };
+        }
+        return {
+          ok: false,
+          status: 404,
+          json: async () => ({ detail: "no remediation record for finding: f-sql-1" }),
+        };
+      }
+      if (method === "POST" && url === "/api/findings/f-sql-1/remediation/proposal") {
+        record = REMEDIATION_PROPOSED;
+        return options.proposalResponse ?? {
+          ok: true,
+          status: 200,
+          json: async () => record,
+        };
+      }
+      if (method === "POST" && url === "/api/findings/f-sql-1/remediation/apply") {
+        if (options.applyResponse) return options.applyResponse;
+        record = REMEDIATION_APPLIED;
+        return { ok: true, status: 200, json: async () => record };
+      }
+      if (method === "POST" && url === "/api/findings/f-sql-1/remediation/verify") {
+        if (options.verifyResponse) return options.verifyResponse;
+        record = REMEDIATION_VERIFIED;
+        return { ok: true, status: 200, json: async () => record };
+      }
+      if (method === "POST" && url === "/api/projects/proj-1/reprepare") {
+        return options.reprepareResponse ?? {
+          ok: true,
+          status: 200,
+          json: async () => ({ id: "proj-1" }),
+        };
+      }
+      throw new Error(`unexpected request: ${method} ${url}`);
+    },
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+function remediationSection() {
+  const title = screen.getByRole("heading", { name: "Remediation" });
+  return title.closest("section") as HTMLElement;
+}
+
+describe("finding remediation workflow", () => {
+  it("explains the gate when no approved approval exists", async () => {
+    mockRemediationFlow({
+      detailPayload: remediationDetail(null, "pending"),
+    });
+    renderPage();
+    await loaded();
+    const section = remediationSection();
+    expect(
+      within(section).getByText(/remediation requires an approved approval/),
+    ).toBeInTheDocument();
+    expect(
+      within(section).queryByRole("button", { name: "Generate Fix Proposal" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("proposes a fix and shows the diff and confirmation gate", async () => {
+    const user = userEvent.setup();
+    mockRemediationFlow({});
+    renderPage();
+    await loaded();
+    const section = remediationSection();
+    await user.click(
+      within(section).getByRole("button", { name: "Generate Fix Proposal" }),
+    );
+    expect(await within(section).findByText("Proposed")).toBeInTheDocument();
+    expect(within(section).getByText("Parameterized Query")).toBeInTheDocument();
+    expect(within(section).getByText("users.py:27")).toBeInTheDocument();
+    expect(
+      within(section).getByText(PROPOSAL_OUT.before.trim()),
+    ).toBeInTheDocument();
+    expect(
+      within(section).getByText(PROPOSAL_OUT.after.trim()),
+    ).toBeInTheDocument();
+    const applyButton = within(section).getByRole("button", {
+      name: "Apply Fix to Workspace Copy",
+    });
+    expect(applyButton).toBeDisabled();
+    await user.click(
+      within(section).getByRole("checkbox", {
+        name: /I understand this patches the private workspace copy/,
+      }),
+    );
+    expect(applyButton).toBeEnabled();
+  });
+
+  it("applies with confirmation, then re-prepares and verifies", async () => {
+    const user = userEvent.setup();
+    mockRemediationFlow({ initialRecord: REMEDIATION_PROPOSED });
+    renderPage();
+    await loaded();
+    const section = remediationSection();
+    await user.click(
+      within(section).getByRole("checkbox", {
+        name: /I understand this patches the private workspace copy/,
+      }),
+    );
+    await user.click(
+      within(section).getByRole("button", { name: "Apply Fix to Workspace Copy" }),
+    );
+    expect(await within(section).findByText("Applied")).toBeInTheDocument();
+    expect(within(section).getByText("security-analyst")).toBeInTheDocument();
+
+    await user.click(
+      within(section).getByRole("button", { name: "Re-prepare & Rescan" }),
+    );
+    await user.click(
+      within(section).getByRole("button", { name: "Verify Fix" }),
+    );
+    expect(
+      await within(section).findByText(/no longer produces this finding/),
+    ).toBeInTheDocument();
+  });
+
+  it("reports still_present when a fresh scan still produces the finding", async () => {
+    const user = userEvent.setup();
+    const fetchMock = mockRemediationFlow({
+      initialRecord: REMEDIATION_APPLIED,
+      verifyResponse: {
+        ok: true,
+        status: 200,
+        json: async () => REMEDIATION_STILL_PRESENT,
+      },
+    });
+    renderPage();
+    await loaded();
+    const section = remediationSection();
+    await user.click(
+      within(section).getByRole("button", { name: "Verify Fix" }),
+    );
+    expect(
+      await within(section).findByText(/still produces this finding/),
+    ).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
+  it("shows manual remediation guidance for no_fix_available", async () => {
+    mockRemediationFlow({ initialRecord: REMEDIATION_NO_FIX });
+    renderPage();
+    await loaded();
+    const section = remediationSection();
+    expect(within(section).getAllByText("No Automatic Fix").length).toBeGreaterThan(0);
+    expect(
+      within(section).getAllByText(/manual remediation is required/).length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(section).queryByRole("button", { name: "Apply Fix to Workspace Copy" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("surfaces backend gate errors instead of fabricating success", async () => {
+    const user = userEvent.setup();
+    mockRemediationFlow({
+      initialRecord: REMEDIATION_PROPOSED,
+      applyResponse: {
+        ok: false,
+        status: 409,
+        json: async () => ({ detail: "source changed since the proposal was generated" }),
+      },
+    });
+    renderPage();
+    await loaded();
+    const section = remediationSection();
+    await user.click(
+      within(section).getByRole("checkbox", {
+        name: /I understand this patches the private workspace copy/,
+      }),
+    );
+    await user.click(
+      within(section).getByRole("button", { name: "Apply Fix to Workspace Copy" }),
+    );
+    expect(
+      await within(section).findByText(/source changed since the proposal/),
+    ).toBeInTheDocument();
+  });
+
+  it("triggers no other pipeline stage during the remediation workflow", async () => {
+    const user = userEvent.setup();
+    const onCall = vi.fn<(url: string, init?: RequestInit) => void>();
+    mockRemediationFlow({
+      initialRecord: REMEDIATION_PROPOSED,
+      onCall,
+    });
+    renderPage();
+    await loaded();
+    const section = remediationSection();
+    await user.click(
+      within(section).getByRole("checkbox", {
+        name: /I understand this patches the private workspace copy/,
+      }),
+    );
+    await user.click(
+      within(section).getByRole("button", { name: "Apply Fix to Workspace Copy" }),
+    );
+    await within(section).findByText("Applied");
+    await user.click(
+      within(section).getByRole("button", { name: "Re-prepare & Rescan" }),
+    );
+    await user.click(
+      within(section).getByRole("button", { name: "Verify Fix" }),
+    );
+    await within(section).findByText(/no longer produces this finding/);
+    expect(onCall.mock.calls.length).toBeGreaterThan(0);
+    for (const [url, init] of onCall.mock.calls) {
+      const method = (init?.method ?? "GET").toUpperCase();
+      const path = String(url);
+      const allowed =
+        (method === "GET" && path === "/api/findings/f-sql-1") ||
+        (method === "GET" && path === "/api/findings/f-sql-1/approval") ||
+        (method === "GET" && path === "/api/findings/f-sql-1/remediation") ||
+        (method === "GET" && path === "/api/approvals/ap-1/history") ||
+        (method === "POST" && path === "/api/findings/f-sql-1/remediation/proposal") ||
+        (method === "POST" && path === "/api/findings/f-sql-1/remediation/apply") ||
+        (method === "POST" && path === "/api/findings/f-sql-1/remediation/verify") ||
+        (method === "POST" && path === "/api/projects/proj-1/reprepare");
+      expect(allowed).toBe(true);
+    }
+    for (const [url, init] of onCall.mock.calls) {
+      const path = String(url);
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (method !== "POST") continue;
+      for (const stage of [
+        "/scan",
+        "/deduplicate",
+        "/validate",
+        "/prove",
+        "/risk",
+        "/sla",
+        "/approval",
+      ]) {
+        expect(path).not.toContain(stage);
+      }
+    }
   });
 });

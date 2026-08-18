@@ -16,6 +16,7 @@ from app.api.proof_models import (
     ProofSummary,
     SandboxPolicyInfo,
 )
+from app.core.time import as_aware_utc
 from app.dedup.service import repo_label_for_file
 from app.prove.store import get_proof_store
 from app.risk.service import all_risk_assessments
@@ -44,7 +45,9 @@ def proof_summary() -> ProofSummary:
     risks = {r.finding_id: r for r in all_risk_assessments()}
 
     records: list[ProofRow] = []
-    for result in sorted(proofs, key=lambda p: p.created_at, reverse=True):
+    for result in sorted(
+        proofs, key=lambda p: as_aware_utc(p.created_at), reverse=True
+    ):
         finding = findings.get(result.finding_id)
         assessment = risks.get(result.finding_id)
         validation = validations.get(result.finding_id)

@@ -14,6 +14,7 @@ from app.api.validation_models import (
     ValidationRow,
     ValidationSummary,
 )
+from app.core.time import as_aware_utc
 from app.dedup.service import repo_label_for_file
 from app.prove.store import get_proof_store
 from app.risk.service import all_risk_assessments
@@ -30,7 +31,9 @@ def validation_summary() -> ValidationSummary:
     risks = {r.finding_id: r for r in all_risk_assessments()}
 
     records: list[ValidationRow] = []
-    for result in sorted(validations, key=lambda v: v.validated_at, reverse=True):
+    for result in sorted(
+        validations, key=lambda v: as_aware_utc(v.validated_at), reverse=True
+    ):
         finding = findings.get(result.finding_id)
         assessment = risks.get(result.finding_id)
         records.append(

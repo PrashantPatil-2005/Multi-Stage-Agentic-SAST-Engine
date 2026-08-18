@@ -130,6 +130,14 @@ export function scanProject(projectId: string): Promise<ScanResponse> {
   );
 }
 
+/** Re-run PREPARE against the existing workspace repo copy (no re-fetch). */
+export function reprepareProject(projectId: string): Promise<ProjectOut> {
+  return requestJson<ProjectOut>(
+    `/api/projects/${encodeURIComponent(projectId)}/reprepare`,
+    { method: "POST" },
+  );
+}
+
 export function getProjectDetail(projectId: string): Promise<ProjectDetail> {
   return requestJson<ProjectDetail>(
     `/api/projects/${encodeURIComponent(projectId)}`,

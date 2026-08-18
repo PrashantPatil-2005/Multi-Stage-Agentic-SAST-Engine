@@ -6,6 +6,7 @@ manual /sla/check convergence guarantee (TEST 10).
 """
 
 from datetime import datetime, timedelta, timezone
+import threading
 
 import pytest
 from fastapi.testclient import TestClient
@@ -16,6 +17,7 @@ from app.main import create_app
 from app.risk.models import RiskAssessment, SLARecord
 from app.risk.service import (
     SLAService,
+    check_and_persist_sla,
     get_escalation_events,
     get_sla_record,
     record_sla_record,
@@ -121,6 +123,38 @@ def test_evaluator_never_duplicates_escalation():
     assert len(get_escalation_events("f-repeat")) == 1
 
 
+# TEST 3b ----------------------------------------------------------------
+def test_concurrent_sla_checks_emit_single_escalation_event():
+    """Regression: the read->check->persist sequence must be atomic across
+    threads (background evaluator + API check requests). Before the fix two
+    concurrent callers could both observe an active record and each emit
+    the active->breached escalation event (observed live, 2 events 78ms
+    apart for one transition)."""
+    _store(_record("f-concurrent"))
+
+    now = FIXED + timedelta(hours=25)
+    failures: list[BaseException] = []
+
+    def worker() -> None:
+        try:
+            check_and_persist_sla("f-concurrent", now=now)
+        except Exception as exc:  # pragma: no cover - failure path
+            failures.append(exc)
+
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert failures == []
+    record = get_sla_record("f-concurrent")
+    assert record.status == "breached"
+    events = get_escalation_events("f-concurrent")
+    assert len(events) == 1
+    assert events[0].new_level == 1
+
+
 # TEST 4 ------------------------------------------------------------------
 def test_evaluator_p4_no_deadline_never_breaches():
     _store(_record("f-p4", priority="P4"))
@@ -147,7 +181,7 @@ def test_evaluator_resolved_never_reactivates():
 
 
 # TEST 6 ------------------------------------------------------------------
-def test_evaluator_mixed_batch_with_failure_isolation():
+def test_evaluator_mixed_batch_with_failure_isolation(monkeypatch):
     _store(_record("f-early", priority="P2"))  # active, not yet due
     _store(_record("f-late"))  # active, overdue
     already = SLAService().check_sla(
@@ -156,14 +190,17 @@ def test_evaluator_mixed_batch_with_failure_isolation():
     _store(already)  # already breached by a previous cycle
     _store(SLAService().resolve_sla(_record("f-resolved")))
     _store(_record("f-p4", priority="P4"))
-    _store(
-        SLARecord(
-            finding_id="f-poison",
-            priority="P1",
-            started_at=datetime(2026, 1, 1),  # naive: check_sla must raise
-            due_at=datetime(2026, 1, 2),
-            status="active",
-        )
+    _store(_record("f-poison"))  # store call itself fails below
+
+    def poisoned(finding_id: str, now=None):
+        if finding_id == "f-poison":
+            raise RuntimeError("simulated store failure")
+        from app.risk.service import check_and_persist_sla as real_check
+
+        return real_check(finding_id, now=now)
+
+    monkeypatch.setattr(
+        "app.risk.sla_evaluator.check_and_persist_sla", poisoned
     )
 
     stats = _evaluator().evaluate_once(now=FIXED + timedelta(hours=30))

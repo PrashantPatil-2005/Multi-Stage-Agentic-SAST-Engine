@@ -34,21 +34,26 @@ export function useBenchmark(): BenchmarkState {
   const [runError, setRunError] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const selectedIdRef = useRef<string | null>(null);
+  const loadTokenRef = useRef(0);
 
   const loadReport = useCallback((id: string) => {
+    const token = ++loadTokenRef.current;
     selectedIdRef.current = id;
     setSelectedId(id);
     setReportError(false);
     setReportLoading(true);
     return getBenchmarkReport(id)
       .then((data) => {
+        if (token !== loadTokenRef.current) return;
         setReport(data);
       })
       .catch(() => {
+        if (token !== loadTokenRef.current) return;
         setReportError(true);
         setReport(null);
       })
       .finally(() => {
+        if (token !== loadTokenRef.current) return;
         setReportLoading(false);
       });
   }, []);
@@ -100,7 +105,11 @@ export function useBenchmark(): BenchmarkState {
       selectedIdRef.current = newReport.benchmark_id;
       setSelectedId(newReport.benchmark_id);
       setReport(newReport);
-      setList(await getBenchmarkList());
+      try {
+        setList(await getBenchmarkList());
+      } catch {
+        // The run itself succeeded; a stale list is repaired on next load.
+      }
       return true;
     } catch {
       setRunError(true);

@@ -7,6 +7,13 @@ The service never deletes findings and never mutates a
 :class:`CandidateFinding`; every input finding survives inside exactly one
 group (``member_finding_ids``), and the canonical finding is simply the
 group member with the lexicographically smallest finding id (deterministic).
+
+Runs are incremental and merge across repositories: groups registered by
+earlier runs stay in the registry, and a later run over a subset of findings
+(e.g. a second repository's scan) joins its members into the existing group
+for the same fingerprint. Existing members are re-read from the finding
+store, so findings that were deleted (e.g. repository removal) drop out of
+their group instead of lingering.
 """
 
 import logging
@@ -19,6 +26,7 @@ from app.dedup.models import (
     FindingFingerprint,
 )
 from app.scan.models import CandidateFinding
+from app.validate.store import get_finding_store
 
 logger = logging.getLogger(__name__)
 
@@ -65,9 +73,19 @@ class DeduplicationService:
             else:
                 bucket[1].append(finding)
 
+        submitted_ids = {f.id for f in findings}
+        finding_store = get_finding_store()
+        next_registry = dict(_GROUPS)
         groups: list[DeduplicationGroup] = []
-        registry: dict[str, DeduplicationGroup] = {}
         for value, (fingerprint, members) in buckets.items():
+            existing = next_registry.get(value)
+            if existing is not None:
+                for member_id in existing.member_finding_ids:
+                    if member_id in submitted_ids:
+                        continue
+                    member = finding_store.get(member_id)
+                    if member is not None:
+                        members.append(member)
             ordered = sorted(members, key=lambda f: f.id)
             canonical = ordered[0]
             group = DeduplicationGroup(
@@ -84,7 +102,7 @@ class DeduplicationService:
                 match_reasons=list(MATCH_REASONS),
             )
             groups.append(group)
-            registry[value] = group
+            next_registry[value] = group
             logger.info(
                 "dedup group: %s count=%d canonical=%s (%s)",
                 fingerprint.vulnerability_type,
@@ -94,8 +112,8 @@ class DeduplicationService:
             )
 
         _GROUPS.clear()
-        _GROUPS.update(registry)
-        self._persist_groups(registry)
+        _GROUPS.update(next_registry)
+        self._persist_groups(next_registry)
         return DeduplicationResult(
             total_findings=len(findings),
             unique_findings=len(groups),

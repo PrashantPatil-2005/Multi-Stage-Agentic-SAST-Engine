@@ -22,6 +22,7 @@ from app.dedup.service import remove_findings
 from app.prepare.fetcher import FetcherError, SecurityError
 from app.prepare.service import PrepareError, PrepareService
 from app.prove.store import get_proof_store
+from app.remediation.store import get_remediation_store
 from app.risk.service import remove_finding_state
 from app.scan.run_service import ScanRunService
 from app.scan.run_store import get_scan_run_store
@@ -159,6 +160,68 @@ def list_projects(request: Request) -> list[DashboardProject]:
     return [DashboardProject(id=project.id, name=project.name) for project in rows]
 
 
+@router.post("/{project_id}/reprepare", response_model=ProjectOut)
+def reprepare_project(project_id: str, request: Request) -> ProjectOut:
+    """Re-run PREPARE against the existing workspace copy of the repository.
+
+    Rebuilds ``snapshot.json`` and ``codemodel.json`` from the already-fetched
+    ``workspace/projects/<id>/repo/`` directory (no re-fetch from git/zip, no
+    network). This is what makes "apply a fix -> rescan" coherent: after a
+    remediation patch the snapshot must reflect the patched code before a
+    fresh scan can verify it.
+
+    Errors: 404 (unknown project), 409 (workspace copy missing).
+    """
+    with request.app.state.session_factory() as session:
+        project = session.get(Project, project_id)
+        if project is None:
+            raise HTTPException(
+                status_code=404, detail=f"project not found: {project_id}"
+            )
+        snapshot_path = project.snapshot_path
+        name = project.name
+        source_type = project.source_type
+        language = project.language
+        location = project.location
+
+    service = _prepare_service(request)
+    try:
+        snapshot, _, _ = service.reprepare(
+            project_id=project_id,
+            name=name,
+            source_type=source_type,
+            language=language,
+            location=location,
+            project_dir=Path(snapshot_path),
+        )
+    except PrepareError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except Exception as exc:  # noqa: BLE001 - unexpected failure boundary
+        logger.exception("REPREPARE failed for project %s", project_id)
+        raise HTTPException(status_code=500, detail="reprepare failed")
+
+    with request.app.state.session_factory() as session:
+        project = session.get(Project, project_id)
+        if project is None:
+            raise HTTPException(
+                status_code=404, detail=f"project not found: {project_id}"
+            )
+        project.status = "prepared"
+        session.commit()
+
+    logger.info("project reprepared: id=%s name=%s", project_id, name)
+    return ProjectOut(
+        id=project_id,
+        name=name,
+        source_type=source_type,
+        location=location,
+        language=language,
+        status="prepared",
+        created_at=snapshot.created_at,
+        summary=snapshot.summary,
+    )
+
+
 @router.delete("/{project_id}", status_code=204)
 def delete_project(project_id: str, request: Request) -> None:
     """Delete a repository and every pipeline record it owns.
@@ -192,12 +255,20 @@ def delete_project(project_id: str, request: Request) -> None:
         proof_store.remove(finding_id)
         remove_finding_state(finding_id)
         approval_store.remove_finding(finding_id)
+        get_remediation_store().remove(finding_id)
     if finding_ids:
         remove_findings(finding_ids)
     run_store.delete_project_runs(project_id)
 
     with request.app.state.session_factory() as session:
-        session.delete(session.get(Project, project_id))
+        project = session.get(Project, project_id)
+        if project is None:
+            # Row vanished between the two blocks (concurrent delete): the
+            # pipeline records are already gone, so report a clean 404.
+            raise HTTPException(
+                status_code=404, detail=f"project not found: {project_id}"
+            )
+        session.delete(project)
         session.commit()
 
     _remove_project_workspace(request, project_id, snapshot_path)
@@ -217,7 +288,7 @@ def get_project(project_id: str, request: Request) -> ProjectDetail:
         project_dir = Path(project.snapshot_path)
     try:
         snapshot = PrepareService.load_snapshot(project_dir)
-    except OSError as exc:
+    except (OSError, ValueError, KeyError) as exc:
         logger.exception("cannot load snapshot for project %s", project_id)
         raise HTTPException(status_code=500, detail="snapshot unavailable")
 

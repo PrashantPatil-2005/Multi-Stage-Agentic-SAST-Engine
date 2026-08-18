@@ -145,7 +145,7 @@ def test_summary_kpis_and_pipeline_with_seeded_data(client):
     assert body["kpis"]["total_findings"] == {"available": True, "value": 3}
     assert body["kpis"]["critical_p0"] == {"available": True, "value": 1}
     assert body["kpis"]["pending_validation"] == {"available": True, "value": 1}
-    assert body["kpis"]["pending_approval"] == {"available": False, "value": 0}
+    assert body["kpis"]["pending_approval"] == {"available": True, "value": 0}
 
     stages = {stage["stage"]: stage for stage in body["pipeline"]}
     assert stages["SCAN"]["count"] == 3
@@ -247,3 +247,25 @@ def test_pending_approval_kpi_and_activity(client):
     body = client.get("/api/dashboard/summary").json()
     assert body["kpis"]["pending_approval"] == {"available": True, "value": 0}
     assert "approval_updated" in [item["kind"] for item in body["recent_activity"]]
+
+
+def test_recent_activity_mixes_db_projects_and_in_memory_events(client, fixture_repo):
+    created = client.post(
+        "/api/projects",
+        json={
+            "name": "demo-app",
+            "source_type": "directory",
+            "location": str(fixture_repo),
+            "language": "python",
+        },
+    )
+    assert created.status_code == 201
+
+    finding = _register_finding(_scan_findings()[0])
+    _validate(finding, "true_positive")
+
+    body = client.get("/api/dashboard/summary").json()
+    assert [item["kind"] for item in body["recent_activity"]] == [
+        "finding_validated",
+        "project_created",
+    ]

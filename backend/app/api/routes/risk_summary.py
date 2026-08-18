@@ -21,6 +21,7 @@ from app.api.risk_models import (
     SlaOverview,
     SlaRow,
 )
+from app.core.time import as_aware_utc
 from app.dedup.service import repo_label_for_file
 from app.risk.models import SLARecord
 from app.risk.service import (
@@ -48,7 +49,7 @@ def _remaining_seconds(record: SLARecord, now: datetime) -> int | None:
     """Frozen snapshot of the time left for an active SLA (never negative)."""
     if record.status != "active" or record.due_at is None:
         return None
-    return max(0, int((record.due_at - now).total_seconds()))
+    return max(0, int((as_aware_utc(record.due_at) - now).total_seconds()))
 
 
 def _sla_row(record: SLARecord, now: datetime, findings: dict) -> SlaRow:
@@ -154,7 +155,9 @@ def risk_summary() -> RiskSummary:
             [r for r in sla_records if r.status == "breached"],
             key=lambda r: (
                 _PRIORITY_RANK.get(r.priority, 9),
-                -(r.breached_at or datetime.min.replace(tzinfo=timezone.utc)).timestamp(),
+                -as_aware_utc(
+                    r.breached_at or datetime.min.replace(tzinfo=timezone.utc)
+                ).timestamp(),
             ),
         )
     ]
@@ -177,7 +180,9 @@ def risk_summary() -> RiskSummary:
                 else None
             ),
         )
-        for event in sorted(escalations, key=lambda e: e.created_at, reverse=True)
+        for event in sorted(
+            escalations, key=lambda e: as_aware_utc(e.created_at), reverse=True
+        )
     ]
 
     return RiskSummary(

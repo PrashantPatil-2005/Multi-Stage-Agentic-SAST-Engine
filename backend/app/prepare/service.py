@@ -105,6 +105,66 @@ class PrepareService:
             (project_dir / CODE_MODEL_FILE).read_text(encoding="utf-8")
         )
 
+    # ------------------------------------------------------------- re-prepare
+
+    def reprepare(
+        self,
+        project_id: str,
+        name: str,
+        source_type: str,
+        language: str,
+        location: str,
+        project_dir: Path,
+    ) -> tuple[ProjectSnapshot, CodeModel, Path]:
+        """Re-run PREPARE against the existing workspace repo copy.
+
+        Rebuilds ``snapshot.json`` and ``codemodel.json`` from the files
+        already copied under ``project_dir/repo`` (used after a remediation
+        patch so a fresh scan sees the patched code). No fetch, no network.
+        """
+        repo_dir = project_dir / "repo"
+        if not repo_dir.is_dir():
+            raise PrepareError(f"no workspace copy to re-prepare at {repo_dir}")
+
+        fetcher = self._fetcher or RepoFetcher(self._settings)
+        result = fetcher._walk(repo_dir)
+
+        parsed_files = []
+        for rel_path in sorted(result.copied_files):
+            if not rel_path.endswith(".py"):
+                continue
+            file_path = repo_dir / rel_path
+            try:
+                raw = file_path.read_bytes()
+            except OSError as exc:
+                logger.warning("cannot read %s: %s", rel_path, exc)
+                continue
+            if b"\x00" in raw[:8192]:
+                logger.debug("skipping binary-looking file %s", rel_path)
+                parsed_files.append(self._parser.parse(rel_path, "<binary content>\n"))
+                continue
+            source = raw.decode("utf-8", errors="replace")
+            parsed_files.append(self._parser.parse(rel_path, source))
+
+        spec = RepoSpec(name=name, source_type=source_type, location=location or "n/a", language=language)
+        snapshot = self._build_snapshot(spec, project_id, result, parsed_files)
+        project_dir.mkdir(parents=True, exist_ok=True)
+        (project_dir / SNAPSHOT_FILE).write_text(
+            snapshot.model_dump_json(indent=2), encoding="utf-8"
+        )
+        code_model = get_builder(language).build(snapshot)
+        (project_dir / CODE_MODEL_FILE).write_text(
+            code_model.model_dump_json(indent=2), encoding="utf-8"
+        )
+        logger.info(
+            "REPREPARE complete: project=%s files=%d python=%d failures=%d",
+            project_id,
+            snapshot.summary.fetched_files,
+            snapshot.summary.python_files,
+            snapshot.summary.parse_failures,
+        )
+        return snapshot, code_model, project_dir
+
     # ------------------------------------------------------------- internal
 
     def _build_snapshot(

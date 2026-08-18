@@ -651,6 +651,49 @@
   color: var(--color-warning);
 }
 
+/* ---------------------------------------------------------- Remediation */
+
+.fd-remediation__diff {
+  margin: 8px 0 0;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.fd-remediation__diff-line {
+  padding: 6px 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.fd-remediation__diff-line--before {
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
+}
+
+.fd-remediation__diff-line--after {
+  border-top: var(--border-width) solid var(--color-border);
+  color: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 8%, transparent);
+}
+
+.fd-remediation__confirm {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.fd-remediation__confirm input {
+  margin-top: 2px;
+  accent-color: var(--color-primary);
+}
+
 /* -------------------------------------------------------- Raw data view */
 
 .fd-raw__pre {

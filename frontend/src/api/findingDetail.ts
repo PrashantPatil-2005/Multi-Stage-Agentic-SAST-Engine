@@ -3,6 +3,7 @@
    (GET /api/findings/{finding_id}). Read-only: nothing here mutates state. */
 
 import type { ApprovalRequest } from "./approvals";
+import type { RemediationRecord } from "./remediation";
 import type { ScanRun } from "./scans";
 
 export interface FindingDetailSource {
@@ -126,6 +127,8 @@ export interface FindingDetail {
   proof: FindingProofDetail | null;
   approval: ApprovalRequest | null;
   dedup: FindingDedupDetail | null;
+  /** Post-approval remediation workflow record for this finding. */
+  remediation?: RemediationRecord | null;
   /** Owning project + every producing scan run (explicit lineage). */
   project?: FindingProject | null;
   scan_runs?: ScanRun[];

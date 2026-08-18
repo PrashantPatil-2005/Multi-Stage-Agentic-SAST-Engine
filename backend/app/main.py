@@ -16,6 +16,7 @@ from app.api.routes import (
     proofs,
     projects,
     proof_summary,
+    remediation,
     repositories,
     risk,
     risk_summary,
@@ -90,11 +91,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(risk_summary.router, prefix="/api")
     app.include_router(validation_summary.router, prefix="/api")
     app.include_router(proof_summary.router, prefix="/api")
+    app.include_router(remediation.router, prefix="/api")
     app.include_router(repositories.router, prefix="/api")
 
     @app.get("/api/health")
     def health() -> dict:
-        return {"status": "ok", "stage": "prepare"}
+        from app.scan.run_models import STAGE_NAMES
+
+        return {"status": "ok", "stage": STAGE_NAMES[0]}
 
     return app
 

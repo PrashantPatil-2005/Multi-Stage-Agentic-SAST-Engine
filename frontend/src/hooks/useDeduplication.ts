@@ -111,7 +111,15 @@ export function useDeduplication() {
       try {
         runs = await getProjectScans(projectId);
       } catch {
-        runs = [];
+        setRun({
+          loading: false,
+          projectId,
+          repoName,
+          result: null,
+          error: "unable to load scan history for this repository",
+          noFindings: false,
+        });
+        return;
       }
       if (runs.length > 1) {
         setRun(IDLE);

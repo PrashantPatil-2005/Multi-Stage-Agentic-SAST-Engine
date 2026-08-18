@@ -17,6 +17,7 @@ overwriting the previous one.
 import json
 import logging
 
+from app.core.time import as_aware_utc
 from app.db.models import (
     ScanFindingRow,
     ScanRunRow,
@@ -65,7 +66,7 @@ class ScanRunStore:
             )
             self._executions.setdefault(execution.scan_run_id, []).append(execution)
         for run_id, executions in self._executions.items():
-            executions.sort(key=lambda e: e.started_at)
+            executions.sort(key=lambda e: as_aware_utc(e.started_at))
         for row in lineage_rows:
             self._lineage.setdefault(row.scan_run_id, []).append(row.finding_id)
 
@@ -280,7 +281,7 @@ class ScanRunStore:
     ) -> list[ScanStageExecution]:
         """Append-only execution history for a run, oldest first."""
         executions = list(self._executions.get(scan_run_id, []))
-        executions.sort(key=lambda e: e.started_at)
+        executions.sort(key=lambda e: as_aware_utc(e.started_at))
         return executions
 
     def finding_ids_for_run(self, scan_run_id: str) -> list[str]:

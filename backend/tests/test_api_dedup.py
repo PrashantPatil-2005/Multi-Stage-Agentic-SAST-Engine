@@ -91,3 +91,38 @@ def test_get_group_by_fingerprint(client, registered_cross_repo):
 def test_get_group_unknown_fingerprint_404(client):
     response = client.get("/api/deduplication/" + "f" * 64)
     assert response.status_code == 404
+
+
+def test_incremental_cross_repo_dedup_merges_groups(client):
+    """The per-repository UI flow still produces cross-repo groups.
+
+    Regression: deduplicating repository B's findings in a later call must
+    join repository A's already-grouped findings instead of replacing the
+    group with only the submitted members.
+    """
+    sources = {
+        "repository_a/views.py": (
+            DEDUP_FIXTURES / "repository_a" / "views.py"
+        ).read_text(encoding="utf-8"),
+        "repository_b/main.py": (
+            DEDUP_FIXTURES / "repository_b" / "main.py"
+        ).read_text(encoding="utf-8"),
+    }
+    report = scan_sources(sources)
+    get_finding_store().add_report(report)
+    a_id, b_id = [f.id for f in report.findings]
+
+    first = client.post("/api/deduplicate", json={"finding_ids": [a_id]})
+    assert first.status_code == 200
+    assert first.json()["groups"][0]["occurrence_count"] == 1
+
+    second = client.post("/api/deduplicate", json={"finding_ids": [b_id]})
+    assert second.status_code == 200
+    group = second.json()["groups"][0]
+    assert group["occurrence_count"] == 2
+    assert sorted(group["member_finding_ids"]) == sorted([a_id, b_id])
+    assert group["repositories"] == ["repository_a", "repository_b"]
+
+    lookup = client.get(f"/api/deduplication/{group['fingerprint']}")
+    assert lookup.status_code == 200
+    assert lookup.json()["occurrence_count"] == 2

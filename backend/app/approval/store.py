@@ -7,6 +7,7 @@ both, with each request's event trail ordered by creation time.
 """
 
 from app.approval.models import ApprovalEvent, ApprovalRequest
+from app.core.time import as_aware_utc
 from app.db.models import ApprovalEventRow, ApprovalRequestRow
 from app.db.persistence import db_delete_all, db_insert, db_load_all, db_upsert
 
@@ -28,7 +29,7 @@ class ApprovalStore:
         for _, event in db_load_all(factory, ApprovalEventRow, ApprovalEvent, "event_id"):
             self._events.setdefault(event.approval_id, []).append(event)
         for events in self._events.values():
-            events.sort(key=lambda e: e.created_at)
+            events.sort(key=lambda e: as_aware_utc(e.created_at))
 
     def get(self, approval_id: str) -> ApprovalRequest | None:
         return self._requests.get(approval_id)
@@ -50,7 +51,7 @@ class ApprovalStore:
         ]
         if not matches:
             return None
-        return max(matches, key=lambda r: r.requested_at)
+        return max(matches, key=lambda r: as_aware_utc(r.requested_at))
 
     def find_active(
         self, finding_id: str, action: str, statuses: frozenset[str]

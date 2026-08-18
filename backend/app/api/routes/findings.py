@@ -31,6 +31,7 @@ from app.approval.store import get_approval_store
 from app.db.models import Project
 from app.dedup.service import all_groups, repo_label_for_file
 from app.prove.store import get_proof_store
+from app.remediation.store import get_remediation_store
 from app.risk.service import (
     all_risk_assessments,
     all_sla_records,
@@ -243,6 +244,7 @@ def get_finding_detail(finding_id: str, request: Request) -> FindingDetail:
         proof=_proof_detail(finding_id),
         approval=approval,
         dedup=_dedup_detail(finding_id),
+        remediation=get_remediation_store().get(finding_id),
         project=_finding_project(request, project_ids),
         scan_runs=runs,
     )

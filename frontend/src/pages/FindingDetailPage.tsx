@@ -13,6 +13,7 @@ import { FindingPipeline } from "../components/finding-detail/FindingPipeline";
 import { LineagePanel } from "../components/finding-detail/LineagePanel";
 import { ProofPanel } from "../components/finding-detail/ProofPanel";
 import { RawFindingData } from "../components/finding-detail/RawFindingData";
+import { RemediationPanel } from "../components/finding-detail/RemediationPanel";
 import { RiskPanel } from "../components/finding-detail/RiskPanel";
 import { RunContextSelect } from "../components/finding-detail/RunContextSelect";
 import { SlaPanel } from "../components/finding-detail/SlaPanel";
@@ -210,6 +211,11 @@ export function FindingDetailPage() {
             detail={detail}
             onApprovalChanged={retry}
             runContextId={runContextId}
+            disabled={contextRequired}
+          />
+          <RemediationPanel
+            detail={detail}
+            onRemediationChanged={retry}
             disabled={contextRequired}
           />
           <DeduplicationPanel detail={detail} />

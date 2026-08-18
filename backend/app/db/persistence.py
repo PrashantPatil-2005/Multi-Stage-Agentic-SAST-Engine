@@ -98,6 +98,7 @@ def configure_stores(session_factory) -> None:
     from app.benchmark.service import set_benchmark_store_factory
     from app.dedup.service import set_dedup_store_factory
     from app.prove.store import set_proof_store_factory
+    from app.remediation.store import set_remediation_store_factory
     from app.risk.service import set_risk_store_factory
     from app.scan.run_store import set_scan_run_store_factory
     from app.validate.store import set_validate_store_factory
@@ -109,4 +110,5 @@ def configure_stores(session_factory) -> None:
     set_dedup_store_factory(session_factory)
     set_scan_run_store_factory(session_factory)
     set_benchmark_store_factory(session_factory)
+    set_remediation_store_factory(session_factory)
     logger.info("pipeline stores configured with database session factory")

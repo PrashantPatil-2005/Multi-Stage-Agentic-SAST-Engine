@@ -29,8 +29,7 @@ from datetime import datetime, timezone
 from app.risk.service import (
     SLAService,
     all_sla_records,
-    record_escalation_event,
-    record_sla_record,
+    check_and_persist_sla,
 )
 
 logger = logging.getLogger(__name__)
@@ -90,10 +89,8 @@ class SlaEvaluator:
                 skipped += 1
                 continue
             try:
-                updated, event = self._service.check_sla(record, now=now)
-                record_sla_record(updated)
+                updated, event = check_and_persist_sla(record.finding_id, now=now)
                 if event is not None:
-                    record_escalation_event(event)
                     breached += 1
             except Exception as exc:  # failure isolation per record
                 errors += 1

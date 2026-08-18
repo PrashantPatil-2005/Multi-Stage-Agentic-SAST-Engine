@@ -6,7 +6,6 @@ nothing is ever mutated.
 """
 
 import logging
-from datetime import datetime
 
 from fastapi import APIRouter, Request
 
@@ -23,6 +22,7 @@ from app.api.dashboard_models import (
 from app.approval.store import get_approval_store
 from app.db.models import Project
 from app.dedup.service import all_groups, repo_label_for_file
+from app.core.time import as_aware_utc
 from app.prove.store import get_proof_store
 from app.risk.service import (
     all_escalation_events,
@@ -56,7 +56,12 @@ def _finding_status(
 ) -> str:
     approval = next((a for a in approvals if a.finding_id == finding_id), None)
     if approval is not None:
-        return "approved" if approval.status == "approved" else "pending approval"
+        return {
+            "approved": "approved",
+            "rejected": "rejected",
+            "changes_requested": "changes requested",
+            "pending": "pending approval",
+        }.get(approval.status, approval.status)
     proof = proofs.get(finding_id)
     if proof is not None:
         return proof.status.replace("_", " ")
@@ -128,7 +133,7 @@ def _activity(
                 created_at=event.created_at,
             )
         )
-    items.sort(key=lambda item: item.created_at, reverse=True)
+    items.sort(key=lambda item: as_aware_utc(item.created_at), reverse=True)
     return items[:10]
 
 
@@ -178,7 +183,12 @@ def dashboard_summary(request: Request) -> DashboardSummary:
             value=max(0, len(findings) - len(validations)),
         ),
         "pending_approval": DashboardKpi(
-            available=bool(approvals), value=pending_approval_count
+            available=bool(findings),
+            value=sum(
+                1
+                for a in approvals
+                if a.status in ("pending", "changes_requested")
+            ),
         ),
     }
 

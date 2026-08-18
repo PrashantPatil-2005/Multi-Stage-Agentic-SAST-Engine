@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { useRepositories } from "../hooks/useRepositories";
@@ -86,6 +86,18 @@ export function RepositoriesPage() {
     return value !== null && value.trim() !== "" ? value : undefined;
   }, [searchParams]);
 
+  // Reload the inventory once a deduplication run succeeds so the updated
+  // findings are reflected in the table. Errors keep the current view.
+  const dedupSettled = dedup.result !== null;
+  const prevSettledRef = useRef(false);
+  useEffect(() => {
+    if (dedupSettled && !prevSettledRef.current) {
+      reload();
+    }
+    prevSettledRef.current = dedupSettled;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dedupSettled]);
+
   const filterValues: FilterValues = useMemo(
     () => ({
       q: searchParams.get("q") ?? "",
@@ -100,6 +112,11 @@ export function RepositoriesPage() {
     scopedProjectId !== undefined
       ? (repositories.find((row) => row.project_id === scopedProjectId) ?? null)
       : null;
+  const scopedUnknown =
+    scopedProjectId !== undefined &&
+    list !== null &&
+    !loading &&
+    scopedRepository === null;
   const visibleRepositories = scopedRepository
     ? [scopedRepository]
     : repositories;
@@ -492,6 +509,27 @@ export function RepositoriesPage() {
             })}
           </ul>
         </div>
+      ) : null}
+
+      {scopedUnknown ? (
+        <Card aria-label="Scoped repository not found">
+          <div className="repo-empty">
+            <h2 className="repo-empty__title">Repository not found</h2>
+            <p className="repo-empty__text">
+              No repository matches the requested project{" "}
+              <code className="repo-empty__id">{scopedProjectId}</code> in the
+              current inventory.
+            </p>
+            <div className="repo-empty__cta">
+              <Link
+                className="ui-button ui-button--primary"
+                to="/repositories"
+              >
+                View all repositories
+              </Link>
+            </div>
+          </div>
+        </Card>
       ) : null}
 
       {loading ? (

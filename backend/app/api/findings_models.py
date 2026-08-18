@@ -12,6 +12,7 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from app.approval.models import ApprovalRequest
+from app.remediation.models import RemediationRecord
 from app.risk.models import RiskAssessment
 from app.scan.models import SinkRef, SourceRef, TaintStep
 from app.scan.run_models import ScanRun
@@ -125,6 +126,9 @@ class FindingDetail(BaseModel):
     proof: FindingProofDetail | None
     approval: ApprovalRequest | None
     dedup: FindingDedupDetail | None
+    #: Post-approval remediation workflow record (proposal/diff + apply/verify
+    #: state), when one exists.
+    remediation: RemediationRecord | None = None
     #: Authoritative lineage (Phase 14G): owning project plus every scan run
     #: whose explicit scan_findings lineage produced this finding (newest
     #: first). Both are derived from persisted relationships only.

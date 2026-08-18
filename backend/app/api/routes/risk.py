@@ -25,10 +25,10 @@ from app.risk.models import (
 from app.risk.service import (
     RiskService,
     SLAService,
+    check_and_persist_sla,
     get_escalation_events,
     get_risk_assessment,
     get_sla_record,
-    record_escalation_event,
     record_risk_assessment,
     record_sla_record,
 )
@@ -179,12 +179,12 @@ def get_sla(finding_id: str) -> SLARecord:
 
 
 def _check_sla(finding_id: str, body: SlaCheckRequest | None) -> SlaCheckResult:
-    record = _require_sla(finding_id)
     now = _parse_time(body.now if body else None, "now")
-    updated, event = SLAService().check_sla(record, now)
-    record_sla_record(updated)
-    if event is not None:
-        record_escalation_event(event)
+    updated, event = check_and_persist_sla(finding_id, now)
+    if updated is None:
+        raise HTTPException(
+            status_code=404, detail=f"no SLA record for finding: {finding_id}"
+        )
     return SlaCheckResult(sla=updated, escalation=event)
 
 

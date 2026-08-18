@@ -24,6 +24,7 @@ from app.approval.service import (
     InvalidTransitionError,
 )
 from app.approval.store import get_approval_store
+from app.core.time import as_aware_utc
 from app.dedup.service import repo_label_for_file
 from app.risk.service import all_risk_assessments
 from app.scan.run_models import STAGE_APPROVAL
@@ -223,7 +224,7 @@ def list_approvals() -> list[ApprovalListItem]:
     items.sort(
         key=lambda item: (
             _STATUS_RANK.get(item.status, 9),
-            -item.requested_at.timestamp(),
+            -as_aware_utc(item.requested_at).timestamp(),
         )
     )
     return items

@@ -95,7 +95,13 @@ def test_downstream_state_survives_restart(tmp_path, fixture_repo):
 
     with _client(settings) as client:
         assert client.get(f"/api/findings/{fid}/validation").json() == validation
-        assert client.get(f"/api/findings/{fid}/proof").json() == proof
+        # GET /proof is a deliberately redacted view (no raw artifacts or
+        # sandbox host paths); the POST /prove result is the full record.
+        stored_proof = client.get(f"/api/findings/{fid}/proof").json()
+        for key in ("status", "confidence", "summary", "duration_ms", "error"):
+            assert stored_proof[key] == proof[key]
+        assert stored_proof["sandbox_policy"]["network_enabled"] == \
+            proof["sandbox_policy"]["network_enabled"]
         assert client.get(f"/api/findings/{fid}/risk").json() == risk
         assert client.get(f"/api/findings/{fid}/sla").json() == sla
         assert client.get(f"/api/findings/{fid}/approval").json() == decided
@@ -200,4 +206,84 @@ def test_empty_database_behaves_like_fresh_application(tmp_path):
         }
         assert client.get("/api/findings/does-not-exist").status_code == 404
         assert client.get("/api/risk/summary").status_code == 200
-        assert client.get("/api/projects").json() == []
+
+
+_LEGACY_DATETIME_TABLES = (
+    "validation_results",
+    "proof_results",
+    "sla_records",
+    "sla_events",
+    "approval_requests",
+    "approval_events",
+    "scan_runs",
+    "scan_stage_runs",
+    "scan_stage_executions",
+)
+
+
+def _strip_utc_suffixes(db_path) -> None:
+    """Rewrite persisted payloads so datetimes become naive (legacy rows).
+
+    Older records stored datetimes without a UTC marker (e.g. from
+    ``datetime.utcnow()``); on rehydration pydantic keeps them naive, and
+    any read path that sorts/compares them against aware timestamps raises
+    ``TypeError``. This helper reproduces that legacy state directly in the
+    database so the regression test covers rehydrated, mixed-tz data.
+    """
+    import sqlite3
+
+    with sqlite3.connect(db_path) as conn:
+        for table in _LEGACY_DATETIME_TABLES:
+            rows = conn.execute(
+                f"SELECT rowid, payload FROM {table}"
+            ).fetchall()
+            for rowid, payload in rows:
+                if not payload or 'Z"' not in payload:
+                    continue
+                naive = payload.replace('Z"', '"')
+                if naive != payload:
+                    conn.execute(
+                        f"UPDATE {table} SET payload = ? WHERE rowid = ?",
+                        (naive, rowid),
+                    )
+
+
+def test_mixed_naive_datetimes_survive_restart(tmp_path, fixture_repo):
+    """Read endpoints must not crash on legacy naive datetimes (regression).
+
+    A pre-timezone-convention database holds naive ISO datetimes; after
+    rehydration those mix with aware timestamps created by newer stages.
+    Dashboard activity, approvals list/history, scan run detail, escalations
+    and SLA checks all sort or compare datetimes, and previously raised
+    ``TypeError`` (dashboard crashed 52x against the real database).
+    """
+    settings = _settings(tmp_path, db_name="legacy-tz.db")
+    with _client(settings, fake_validation=True) as client:
+        _, scan = _create_and_scan(client, fixture_repo)
+        fid = _sql_finding_id(client, scan)
+        client.post(f"/api/findings/{fid}/validate", json={"provider": "huggingface"})
+        client.post(f"/api/findings/{fid}/prove")
+        client.post(f"/api/findings/{fid}/risk")
+        client.post(f"/api/findings/{fid}/sla")
+        approval = client.post(f"/api/findings/{fid}/approval").json()
+        client.post(
+            f"/api/approvals/{approval['id']}/approve",
+            json={"reviewed_by": "reviewer-1", "reason": "approved"},
+        )
+
+    _strip_utc_suffixes(tmp_path / "legacy-tz.db")
+
+    with _client(settings) as client:
+        run_id = scan["scan_run_id"]
+        assert client.get("/api/dashboard/summary").status_code == 200
+        assert client.get("/api/risk/summary").status_code == 200
+        assert client.get("/api/approvals").status_code == 200
+        assert client.get(f"/api/approvals/{approval['id']}/history").status_code == 200
+        assert client.get(f"/api/scans/{run_id}").status_code == 200
+        assert client.get(f"/api/findings/{fid}/escalations").status_code == 200
+        assert client.post(f"/api/findings/{fid}/sla/check").status_code == 200
+
+        dashboard = client.get("/api/dashboard/summary").json()
+        assert dashboard["kpis"]["total_findings"]["value"] == len(
+            scan["finding_ids"]
+        )

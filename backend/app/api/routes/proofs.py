@@ -23,6 +23,7 @@ Errors:
 """
 
 import logging
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -45,6 +46,35 @@ router = APIRouter(prefix="/findings", tags=["proof"])
 
 class ProveRequest(BaseModel):
     scan_run_id: str | None = None
+
+
+class SafeProofDetail(BaseModel):
+    """Safe read-only proof summary for GET /findings/{id}/proof.
+
+    Deliberately excludes ``evidence``/``artifacts`` (raw harness output,
+    generated payloads) and the host-path fields of ``sandbox_policy``
+    (``allowed_paths``, ``temporary_directory``): execution details and
+    sandbox internals are never shipped to clients.
+    """
+
+    finding_id: str
+    vulnerability_type: str
+    status: str  # "verified" | "not_verified" | "blocked" | "error"
+    confidence: float
+    summary: str
+    created_at: datetime
+    duration_ms: float
+    error: str | None
+    sandbox_policy: dict | None
+
+
+def _safe_policy(proof: ProofResult) -> dict | None:
+    if proof.sandbox_policy is None:
+        return None
+    data = proof.sandbox_policy.model_dump()
+    data.pop("allowed_paths", None)
+    data.pop("temporary_directory", None)
+    return data
 
 
 def get_proof_service() -> ProofService:
@@ -119,12 +149,22 @@ def prove_finding(
     return result
 
 
-@router.get("/{finding_id}/proof", response_model=ProofResult)
-def get_proof(finding_id: str) -> ProofResult:
+@router.get("/{finding_id}/proof", response_model=SafeProofDetail)
+def get_proof(finding_id: str) -> SafeProofDetail:
     result = get_proof_store().get(finding_id)
     if result is None:
         raise HTTPException(
             status_code=404,
             detail=f"no proof recorded for finding: {finding_id}",
         )
-    return result
+    return SafeProofDetail(
+        finding_id=result.finding_id,
+        vulnerability_type=result.vulnerability_type,
+        status=result.status,
+        confidence=result.confidence,
+        summary=result.summary,
+        created_at=result.created_at,
+        duration_ms=result.duration_ms,
+        error=result.error,
+        sandbox_policy=_safe_policy(result),
+    )

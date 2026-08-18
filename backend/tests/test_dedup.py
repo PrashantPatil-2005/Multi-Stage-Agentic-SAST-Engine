@@ -1,11 +1,25 @@
 """Cross-repository finding deduplication tests."""
 
+import pytest
+
 from app.dedup.fingerprint import FindingFingerprintBuilder, normalize_snippet
 from app.dedup.service import DeduplicationService
 from app.scan.models import CandidateFinding, Evidence, SinkRef, SourceRef, TaintStep
 from tests.scan_test_helpers import FIXTURES, scan_fixture_files, scan_sources
 
 DEDUP_FIXTURES = FIXTURES / "dedup"
+
+
+@pytest.fixture(autouse=True)
+def clean_dedup_state():
+    from app.dedup.service import reset_groups
+    from app.validate.store import get_finding_store
+
+    get_finding_store().clear()
+    reset_groups()
+    yield
+    get_finding_store().clear()
+    reset_groups()
 
 
 def _scan_repos() -> list[CandidateFinding]:
@@ -249,3 +263,82 @@ def test_normalization_ignores_identifier_names():
     assert normalize_snippet("cursor.execute(query)") == normalize_snippet(
         "db.execute(sql)"
     )
+
+
+def test_incremental_runs_merge_across_repositories():
+    """A later run over one repository joins the earlier group of the other.
+
+    Regression: previously every run replaced the registry with only the
+    submitted findings, so deduplicating repository B alone dropped
+    repository A's member from the shared group.
+    """
+    from app.dedup.service import lookup_group
+    from app.validate.store import get_finding_store
+
+    store = get_finding_store()
+    try:
+        findings = _scan_repos()
+        store.add(findings[0])
+        store.add(findings[1])
+        service = DeduplicationService()
+        first = service.deduplicate([findings[0]])
+        assert first.groups[0].occurrence_count == 1
+        second = service.deduplicate([findings[1]])
+        group = second.groups[0]
+        assert group.occurrence_count == 2
+        assert group.member_finding_ids == sorted(f.id for f in findings)
+        assert group.repositories == ["repository_a", "repository_b"]
+        assert lookup_group(group.fingerprint).occurrence_count == 2
+    finally:
+        store.clear()
+
+
+def test_merge_drops_members_removed_from_finding_store():
+    """Deleted findings (e.g. a removed repository) leave their group."""
+    from app.dedup.service import lookup_group
+    from app.validate.store import get_finding_store
+
+    store = get_finding_store()
+    try:
+        findings = _scan_repos()
+        store.add(findings[0])
+        store.add(findings[1])
+        service = DeduplicationService()
+        service.deduplicate(findings)
+        store.remove(findings[0].id)
+        group = service.deduplicate([findings[1]]).groups[0]
+        assert group.occurrence_count == 1
+        assert group.member_finding_ids == [findings[1].id]
+        assert lookup_group(group.fingerprint).occurrence_count == 1
+    finally:
+        store.clear()
+
+
+def test_untouched_groups_survive_other_runs():
+    """Groups not touched by a run stay registered and persisted."""
+    from app.dedup.service import lookup_group
+    from app.validate.store import get_finding_store
+
+    store = get_finding_store()
+    try:
+        findings = _scan_repos()
+        store.add(findings[0])
+        store.add(findings[1])
+        cmdi = make_finding(
+            "c" * 64,
+            vuln_type="command_injection",
+            source_kind="function_param",
+            sink_kind="shell_exec",
+            source_snippet="def run(cmd):",
+            sink_snippet="subprocess.run(cmd, shell=True)",
+        )
+        store.add(cmdi)
+        service = DeduplicationService()
+        first = service.deduplicate(findings)
+        second = service.deduplicate([cmdi])
+        assert len(second.groups) == 1
+        surviving = lookup_group(first.groups[0].fingerprint)
+        assert surviving is not None
+        assert surviving.occurrence_count == 2
+    finally:
+        store.clear()

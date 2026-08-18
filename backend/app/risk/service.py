@@ -13,8 +13,10 @@ datetimes raise ``ValueError``.
 """
 
 import logging
+import threading
 from datetime import datetime, timezone
 
+from app.core.time import as_aware_utc
 from app.dedup.models import DeduplicationGroup
 from app.prove.models import ProofResult
 from app.risk.models import (
@@ -146,14 +148,14 @@ class SLAService:
                 None,
             )
 
-        if now >= record.due_at:
+        if now >= as_aware_utc(record.due_at):
             event = EscalationEvent(
                 finding_id=record.finding_id,
                 previous_level=record.escalation_level,
                 new_level=record.escalation_level + 1,
                 reason=(
-                    f"SLA breached for {record.priority}: due {record.due_at.isoformat()} "
-                    f"exceeded at {now.isoformat()}"
+                    f"SLA breached for {record.priority}: due "
+                    f"{as_aware_utc(record.due_at).isoformat()} exceeded at {now.isoformat()}"
                 ),
                 created_at=now,
             )
@@ -206,6 +208,8 @@ _sla_store: dict[str, SLARecord] = {}
 _escalation_store: dict[str, list[EscalationEvent]] = {}
 _factory = None
 
+_sla_lock = threading.Lock()
+
 
 def set_risk_store_factory(factory) -> None:
     """Rehydrate risk/SLA/escalation stores from the database (lifespan)."""
@@ -226,7 +230,7 @@ def set_risk_store_factory(factory) -> None:
     for _, event in db_load_all(factory, SlaEventRow, EscalationEvent, "id"):
         _escalation_store.setdefault(event.finding_id, []).append(event)
     for events in _escalation_store.values():
-        events.sort(key=lambda e: e.created_at)
+        events.sort(key=lambda e: as_aware_utc(e.created_at))
 
 
 def get_risk_assessment(finding_id: str) -> RiskAssessment | None:
@@ -257,6 +261,30 @@ def record_sla_record(record: SLARecord) -> None:
 
 def get_escalation_events(finding_id: str) -> list[EscalationEvent]:
     return list(_escalation_store.get(finding_id, []))
+
+
+def check_and_persist_sla(
+    finding_id: str,
+    now: datetime | None = None,
+) -> tuple[SLARecord | None, EscalationEvent | None]:
+    """Atomic evaluate-and-persist for one SLA record.
+
+    Serializes the read -> check -> persist sequence with ``_sla_lock`` so
+    concurrent callers (the background evaluator thread and API check
+    requests) cannot both observe an active record and each emit the
+    active -> breached escalation event. Exactly one event is created per
+    transition (idempotent on repeated calls).
+    """
+    with _sla_lock:
+        record = _sla_store.get(finding_id)
+        if record is None:
+            return None, None
+        updated, event = SLAService().check_sla(record, now)
+        if updated != record:
+            record_sla_record(updated)
+        if event is not None:
+            record_escalation_event(event)
+        return updated, event
 
 
 def record_escalation_event(event: EscalationEvent) -> None:

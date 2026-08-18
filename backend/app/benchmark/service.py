@@ -32,6 +32,7 @@ from app.benchmark.models import (
 )
 from app.benchmark.semgrep_runner import SemgrepRunner
 from app.core.contracts import CodeModel
+from app.core.time import as_aware_utc
 from app.prepare.parser import PythonASTParser
 from app.scan.models import CandidateFinding
 from app.scan.service import ScanService
@@ -112,7 +113,9 @@ def get_report(benchmark_id: str) -> BenchmarkReport | None:
 
 def list_reports() -> list[BenchmarkReport]:
     """Read-only accessor: all stored reports, newest first."""
-    return sorted(_REPORTS.values(), key=lambda r: r.created_at, reverse=True)
+    return sorted(
+        _REPORTS.values(), key=lambda r: as_aware_utc(r.created_at), reverse=True
+    )
 
 
 def clear_reports() -> None:
@@ -153,7 +156,9 @@ class BenchmarkService:
         model = CodeModel(
             language="python",
             files=[
-                parser.parse(path.name, path.read_text(encoding="utf-8"))
+                parser.parse(
+                    path.name, path.read_text(encoding="utf-8", errors="replace")
+                )
                 for path in sorted(fixture_dir.rglob("*.py"))
                 if not any(
                     part in {"__pycache__", "node_modules", ".venv", "venv", ".git"}

@@ -14,6 +14,7 @@ Errors: 404 (unknown project or scan run).
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
+from app.core.time import as_aware_utc
 from app.db.models import Project
 from app.scan.models import CandidateFinding
 from app.scan.run_models import ScanRun, ScanRunDetail
@@ -46,7 +47,9 @@ def list_scan_runs(
 ) -> list[ScanRun]:
     """Recent scan runs across all projects, newest first (read-only)."""
     runs = get_scan_run_store().all_runs()
-    return sorted(runs, key=lambda r: r.started_at, reverse=True)[:limit]
+    return sorted(
+        runs, key=lambda r: as_aware_utc(r.started_at), reverse=True
+    )[:limit]
 
 
 @router.get("/projects/{project_id}/scans", response_model=list[ScanRun])

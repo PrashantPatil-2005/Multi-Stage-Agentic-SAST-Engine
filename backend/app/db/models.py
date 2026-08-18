@@ -139,3 +139,12 @@ class ScanFindingRow(Base):
 
     scan_run_id: Mapped[str] = mapped_column(String(32), primary_key=True)
     finding_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+
+
+class RemediationRow(Base):
+    """Post-approval remediation workflow record (one per finding)."""
+
+    __tablename__ = "remediation_records"
+
+    finding_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    payload: Mapped[dict] = mapped_column(JSON)

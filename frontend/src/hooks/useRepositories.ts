@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getRepositories } from "../api/repositories";
 import type { RepositoryList } from "../api/repositories";
@@ -15,6 +15,7 @@ export function useRepositories(): RepositoriesState {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const listRef = useRef<RepositoryList | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -23,12 +24,15 @@ export function useRepositories(): RepositoriesState {
     getRepositories()
       .then((data) => {
         if (cancelled) return;
+        listRef.current = data;
         setList(data);
         setLoading(false);
       })
       .catch(() => {
         if (cancelled) return;
-        setError(true);
+        // A failed refresh with stale data on screen should not replace the
+        // list with a full-page error; only a first-load failure is fatal.
+        if (listRef.current === null) setError(true);
         setLoading(false);
       });
     return () => {
