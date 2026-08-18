@@ -252,8 +252,9 @@ export function RemediationPanel({
                   </p>
                 ) : null}
                 <p className="fd-approval__prereq">
-                  Re-run PREPARE against the patched workspace copy, then rescan
-                  and verify the finding.
+                  Re-run PREPARE against the patched workspace copy. After
+                  re-preparing, trigger a rescan from the Repositories page to
+                  verify the finding.
                 </p>
                 <div className="fd-panel__actions">
                   <Button
@@ -261,7 +262,7 @@ export function RemediationPanel({
                     disabled={repreparing || !detail.project?.project_id}
                     onClick={handleReprepare}
                   >
-                    {repreparing ? "Re-preparing\u2026" : "Re-prepare & Rescan"}
+                    {repreparing ? "Re-preparing\u2026" : "Re-prepare"}
                   </Button>
                   <Button
                     variant="secondary"

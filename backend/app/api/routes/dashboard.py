@@ -24,6 +24,7 @@ from app.db.models import Project
 from app.dedup.service import all_groups, repo_label_for_file
 from app.core.time import as_aware_utc
 from app.prove.store import get_proof_store
+from app.remediation.store import get_remediation_store
 from app.risk.service import (
     all_escalation_events,
     all_risk_assessments,
@@ -45,6 +46,7 @@ _PIPELINE_DESCRIPTIONS: dict[str, str] = {
     "VALIDATE": "LLM triage of candidate findings",
     "PROVE": "Dynamic confirmation with sandboxed executions",
     "APPROVAL": "Human approval workflow",
+    "REMEDIATION": "Auto-generated fix proposals and workspace patching",
 }
 
 
@@ -153,6 +155,7 @@ def dashboard_summary(request: Request) -> DashboardSummary:
     approvals = get_approval_store().all()
     approval_events = get_approval_store().all_events()
     groups = all_groups()
+    remediation_records = get_remediation_store().all()
 
     with request.app.state.session_factory() as session:
         project_rows = session.query(Project).order_by(Project.created_at.desc()).all()
@@ -250,6 +253,16 @@ def dashboard_summary(request: Request) -> DashboardSummary:
             if approvals
             else None,
             description=_PIPELINE_DESCRIPTIONS["APPROVAL"],
+        ),
+        DashboardPipelineStage(
+            stage="REMEDIATION",
+            count=len(remediation_records) if remediation_records else None,
+            count_label=_plural(
+                len(remediation_records), "remediation", "remediations"
+            )
+            if remediation_records
+            else None,
+            description=_PIPELINE_DESCRIPTIONS["REMEDIATION"],
         ),
     ]
 

@@ -48,6 +48,7 @@ export function FindingPipeline({ detail }: { detail: FindingDetail }) {
   const validation = detail.validation;
   const proof = detail.proof;
   const approval = detail.approval;
+  const remediation = detail.remediation;
 
   const stages: PipelineStage[] = [
     {
@@ -147,6 +148,43 @@ export function FindingPipeline({ detail }: { detail: FindingDetail }) {
         }
       : {
           name: "APPROVAL",
+          state: "Not completed",
+          result: null,
+          timestamp: null,
+          tone: "neutral",
+        },
+    remediation
+      ? {
+          name: "REMEDIATION",
+          state:
+            remediation.status === "verified"
+              ? "Verified"
+              : remediation.status === "applied"
+                ? "Applied"
+                : remediation.status === "proposed"
+                  ? "Proposed"
+                  : remediation.status === "no_fix_available"
+                    ? "No Fix Available"
+                    : remediation.status === "still_present"
+                      ? "Still Present"
+                      : "Error",
+          result:
+            remediation.proposal?.strategy
+              ? `Strategy: ${remediation.proposal.strategy.replace(/_/g, " ")}`
+              : null,
+          timestamp: remediation.applied_at ?? remediation.created_at ?? null,
+          tone:
+            remediation.status === "verified"
+              ? "success"
+              : remediation.status === "applied"
+                ? "warning"
+                : remediation.status === "still_present" ||
+                  remediation.status === "error"
+                  ? "danger"
+                  : "info",
+        }
+      : {
+          name: "REMEDIATION",
           state: "Not completed",
           result: null,
           timestamp: null,

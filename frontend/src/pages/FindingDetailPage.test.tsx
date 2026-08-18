@@ -4134,7 +4134,7 @@ describe("finding remediation workflow", () => {
     expect(within(section).getByText("security-analyst")).toBeInTheDocument();
 
     await user.click(
-      within(section).getByRole("button", { name: "Re-prepare & Rescan" }),
+      within(section).getByRole("button", { name: "Re-prepare" }),
     );
     await user.click(
       within(section).getByRole("button", { name: "Verify Fix" }),
@@ -4226,7 +4226,7 @@ describe("finding remediation workflow", () => {
     );
     await within(section).findByText("Applied");
     await user.click(
-      within(section).getByRole("button", { name: "Re-prepare & Rescan" }),
+      within(section).getByRole("button", { name: "Re-prepare" }),
     );
     await user.click(
       within(section).getByRole("button", { name: "Verify Fix" }),
