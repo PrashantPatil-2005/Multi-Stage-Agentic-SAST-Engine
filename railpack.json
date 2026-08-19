@@ -10,7 +10,7 @@
         { "cmd": "cd frontend && npm ci --prefer-offline --no-audit --no-fund", "customName": "Install frontend dependencies" },
         { "cmd": "cd frontend && npm run build", "customName": "Build frontend" }
       ],
-      "deployOutputs": ["frontend/dist"]
+      "deployOutputs": [{"include": ["frontend/dist"]}]
     },
     "install-backend": {
       "inputs": [
