@@ -6,19 +6,20 @@
   },
   "steps": {
     "build-frontend": {
+      "inputs": ["...", {"local": true, "include": ["."]}],
       "commands": [
         "cd frontend && npm ci --prefer-offline --no-audit --no-fund",
         "cd frontend && npm run build"
       ]
     },
     "install-backend": {
-      "inputs": [
-        { "step": "packages:mise" },
-        { "step": "build-frontend" }
-      ],
+      "inputs": ["...", {"local": true, "include": ["."]}, {"step": "build-frontend"}],
       "commands": [
         "cd backend && pip install --no-cache-dir ."
       ]
     }
+  },
+  "deploy": {
+    "startCommand": "bash start.sh"
   }
 }
