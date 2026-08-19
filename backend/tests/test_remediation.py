@@ -85,7 +85,7 @@ def _validate_and_prove(client, finding_id):
 def _approve_remediation(client, finding_id):
     created = client.post(
         f"/api/findings/{finding_id}/approval",
-        json={"action": "remediation", "requested_by": "system"},
+        json={"action": "remediation", "requested_by": "manager"},
     )
     assert created.status_code == 200
     approval_id = created.json()["id"]

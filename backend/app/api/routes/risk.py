@@ -13,9 +13,11 @@ Errors: 404 (missing finding / risk / sla), 422 (naive datetime supplied).
 
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 
+from app.auth.models import User
+from app.auth.rbac import Permission, require_permission
 from app.prove.store import get_proof_store
 from app.risk.models import (
     EscalationEvent,
@@ -136,7 +138,9 @@ def _require_stage_context(scan_run_id: str, finding_id: str) -> None:
 
 @router.post("/{finding_id}/risk", response_model=RiskAssessment)
 def assess_risk(
-    finding_id: str, body: RiskStageRequest | None = None
+    finding_id: str,
+    body: RiskStageRequest | None = None,
+    user: User = Depends(require_permission(Permission.ASSESS_RISK)),
 ) -> RiskAssessment:
     if body is not None and body.scan_run_id is not None:
         _require_stage_context(body.scan_run_id, finding_id)
@@ -147,7 +151,10 @@ def assess_risk(
 
 
 @router.get("/{finding_id}/risk", response_model=RiskAssessment)
-def get_risk(finding_id: str) -> RiskAssessment:
+def get_risk(
+    finding_id: str,
+    user: User = Depends(require_permission(Permission.VIEW_RISK)),
+) -> RiskAssessment:
     return _require_risk(finding_id)
 
 
@@ -163,7 +170,9 @@ def _start_sla(finding_id: str) -> SLARecord:
 
 @router.post("/{finding_id}/sla", response_model=SLARecord)
 def create_sla(
-    finding_id: str, body: RiskStageRequest | None = None
+    finding_id: str,
+    body: RiskStageRequest | None = None,
+    user: User = Depends(require_permission(Permission.START_SLA)),
 ) -> SLARecord:
     if body is not None and body.scan_run_id is not None:
         _require_stage_context(body.scan_run_id, finding_id)
@@ -174,7 +183,10 @@ def create_sla(
 
 
 @router.get("/{finding_id}/sla", response_model=SLARecord)
-def get_sla(finding_id: str) -> SLARecord:
+def get_sla(
+    finding_id: str,
+    user: User = Depends(require_permission(Permission.VIEW_RISK)),
+) -> SLARecord:
     return _require_sla(finding_id)
 
 
@@ -189,7 +201,11 @@ def _check_sla(finding_id: str, body: SlaCheckRequest | None) -> SlaCheckResult:
 
 
 @router.post("/{finding_id}/sla/check", response_model=SlaCheckResult)
-def check_sla(finding_id: str, body: SlaCheckRequest | None = None) -> SlaCheckResult:
+def check_sla(
+    finding_id: str,
+    body: SlaCheckRequest | None = None,
+    user: User = Depends(require_permission(Permission.CHECK_SLA)),
+) -> SlaCheckResult:
     if body is not None and body.scan_run_id is not None:
         _require_stage_context(body.scan_run_id, finding_id)
         return record_stage_execution(
@@ -200,7 +216,9 @@ def check_sla(finding_id: str, body: SlaCheckRequest | None = None) -> SlaCheckR
 
 @router.post("/{finding_id}/sla/resolve", response_model=SLARecord)
 def resolve_sla(
-    finding_id: str, body: SlaResolveRequest | None = None
+    finding_id: str,
+    body: SlaResolveRequest | None = None,
+    user: User = Depends(require_permission(Permission.CHECK_SLA)),
 ) -> SLARecord:
     record = _require_sla(finding_id)
     resolved_at = _parse_time(body.resolved_at if body else None, "resolved_at")
@@ -210,6 +228,9 @@ def resolve_sla(
 
 
 @router.get("/{finding_id}/escalations", response_model=list[EscalationEvent])
-def get_escalations(finding_id: str) -> list[EscalationEvent]:
+def get_escalations(
+    finding_id: str,
+    user: User = Depends(require_permission(Permission.VIEW_RISK)),
+) -> list[EscalationEvent]:
     _require_finding(finding_id)
     return get_escalation_events(finding_id)

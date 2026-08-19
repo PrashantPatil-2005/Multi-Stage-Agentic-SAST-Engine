@@ -12,6 +12,7 @@ untouched, unknown projects 404, and a project that was only prepared
 import pytest
 
 from app.api.routes.validations import get_validation_service
+from app.auth.seed import DEMO_PASSWORD
 from app.config import Settings
 from app.main import create_app
 from app.validate.service import ValidationService
@@ -28,7 +29,27 @@ def _settings(tmp_path, db_name: str = "delete-project.db") -> Settings:
 
 
 def _client(settings: Settings) -> TestClient:
-    return TestClient(create_app(settings))
+    app = create_app(settings)
+    from app.db.session import init_db, make_engine, make_session_factory
+    if not hasattr(app.state, "session_factory"):
+        engine = make_engine(settings.database_url)
+        init_db(engine)
+        sf = make_session_factory(engine)
+        app.state.settings = settings
+        app.state.session_factory = sf
+        app.state.prepare_service = None
+        db = sf()
+        try:
+            from app.auth.seed import seed_demo_users
+            seed_demo_users(db)
+        finally:
+            db.close()
+    tc = TestClient(app)
+    tc.post(
+        "/api/auth/login",
+        json={"username": "manager", "password": DEMO_PASSWORD},
+    )
+    return tc
 
 
 @pytest.fixture
@@ -114,7 +135,7 @@ def test_delete_removes_project_and_every_pipeline_record(
             f"/api/findings/{fid}/approval",
             json={
                 "action": "remediation",
-                "requested_by": "system",
+                "requested_by": "manager",
                 "scan_run_id": run_id,
             },
         ).json()

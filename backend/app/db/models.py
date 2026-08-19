@@ -13,7 +13,7 @@ outright, so referential cleanup is handled in code, not by the database.
 
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, Integer, String
+from sqlalchemy import JSON, Boolean, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
@@ -148,3 +148,39 @@ class RemediationRow(Base):
 
     finding_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     payload: Mapped[dict] = mapped_column(JSON)
+
+
+class NotificationReadRow(Base):
+    """Per-user notification read state (derived notifications with read_at)."""
+
+    __tablename__ = "notification_reads"
+
+    id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(32))
+    read_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class UserRow(Base):
+    """Persistent user record for authentication."""
+
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    username: Mapped[str] = mapped_column(String(100), unique=True)
+    display_name: Mapped[str] = mapped_column(String(200))
+    password_hash: Mapped[str] = mapped_column(String(200))
+    role: Mapped[str] = mapped_column(String(20))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class SessionRow(Base):
+    """Server-side session record."""
+
+    __tablename__ = "sessions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(32))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

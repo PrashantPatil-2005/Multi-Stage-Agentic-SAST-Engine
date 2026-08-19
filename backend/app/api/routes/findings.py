@@ -16,7 +16,10 @@ Nothing is mutated; both endpoints are intentionally read-only.
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+
+from app.auth.dependencies import get_current_user
+from app.auth.models import User
 
 from app.api.findings_models import (
     FindingDetail,
@@ -127,13 +130,46 @@ def _list_items(findings: list) -> list[FindingListItem]:
     return items
 
 
+def _matches_search(item: FindingListItem, query: str) -> bool:
+    """Check whether a finding list item matches a free-text search query.
+
+    Searches across finding_id, vulnerability_type, file, repository,
+    source/sink snippets and kinds, and severity/priority.
+    """
+    haystack = " ".join([
+        item.finding_id,
+        item.vulnerability_type,
+        item.file,
+        item.repository or "",
+        item.source_snippet,
+        item.sink_snippet,
+        item.source_kind,
+        item.sink_kind,
+        item.severity,
+        item.priority or "",
+    ]).lower()
+    return query in haystack
+
+
 @router.get("", response_model=list[FindingListItem])
 def list_findings(
     request: Request,
     project_id: str | None = Query(default=None),
+    search: str | None = Query(default=None),
+    user: User = Depends(get_current_user),
 ) -> list[FindingListItem]:
-    """Enumerate findings, optionally scoped to one project's lineage."""
-    return _list_items(_scoped_findings(request, project_id))
+    """Enumerate findings, optionally scoped to one project's lineage.
+
+    When ``search`` is provided only findings whose enriched list row
+    matches the query (case-insensitive substring across id, vulnerability
+    type, file, repository, snippets, severity, priority) are returned.
+    """
+    items = _list_items(_scoped_findings(request, project_id))
+    if search is not None:
+        query = search.strip().lower()
+        if query:
+            items = [item for item in items if _matches_search(item, query)]
+    return items
 
 
 def _sla_detail(finding_id: str, now: datetime) -> FindingSlaDetail | None:
@@ -214,7 +250,11 @@ def _finding_project(request: Request, project_ids: list[str]) -> FindingProject
 
 
 @router.get("/{finding_id}", response_model=FindingDetail)
-def get_finding_detail(finding_id: str, request: Request) -> FindingDetail:
+def get_finding_detail(
+    finding_id: str,
+    request: Request,
+    user: User = Depends(get_current_user),
+) -> FindingDetail:
     finding = get_finding_store().get(finding_id)
     if finding is None:
         raise HTTPException(status_code=404, detail=f"finding not found: {finding_id}")

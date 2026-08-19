@@ -12,7 +12,10 @@ already terminal (completed/failed) when it is served here.
 Errors: 404 (unknown project or scan run).
 """
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+
+from app.auth.dependencies import get_current_user
+from app.auth.models import User
 
 from app.core.time import as_aware_utc
 from app.db.models import Project
@@ -44,6 +47,7 @@ def _require_run(scan_run_id: str) -> ScanRun:
 @router.get("/scans", response_model=list[ScanRun])
 def list_scan_runs(
     limit: int = Query(default=10, ge=1, le=50),
+    user: User = Depends(get_current_user),
 ) -> list[ScanRun]:
     """Recent scan runs across all projects, newest first (read-only)."""
     runs = get_scan_run_store().all_runs()
@@ -53,14 +57,21 @@ def list_scan_runs(
 
 
 @router.get("/projects/{project_id}/scans", response_model=list[ScanRun])
-def list_project_scans(project_id: str, request: Request) -> list[ScanRun]:
+def list_project_scans(
+    project_id: str,
+    request: Request,
+    user: User = Depends(get_current_user),
+) -> list[ScanRun]:
     """Scan history for a project, newest first."""
     _require_project(project_id, request)
     return get_scan_run_store().runs_for_project(project_id)
 
 
 @router.get("/scans/{scan_run_id}", response_model=ScanRunDetail)
-def get_scan_run(scan_run_id: str) -> ScanRunDetail:
+def get_scan_run(
+    scan_run_id: str,
+    user: User = Depends(get_current_user),
+) -> ScanRunDetail:
     """One scan run with the status of every registered stage and the
     append-only execution history of each stage."""
     store = get_scan_run_store()
@@ -73,7 +84,10 @@ def get_scan_run(scan_run_id: str) -> ScanRunDetail:
 
 
 @router.get("/scans/{scan_run_id}/findings", response_model=list[CandidateFinding])
-def get_scan_findings(scan_run_id: str) -> list[CandidateFinding]:
+def get_scan_findings(
+    scan_run_id: str,
+    user: User = Depends(get_current_user),
+) -> list[CandidateFinding]:
     """Findings produced by a scan run (explicit lineage, in report order).
 
     A finding registered by the run but no longer present in the finding

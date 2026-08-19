@@ -20,6 +20,8 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.auth.models import User
+from app.auth.rbac import Permission, require_permission
 from app.scan.run_models import STAGE_VALIDATE
 from app.scan.run_service import (
     StageContextError,
@@ -66,6 +68,7 @@ def validate_finding(
     finding_id: str,
     body: ValidateRequest,
     service: ValidationService = Depends(get_validation_service),
+    user: User = Depends(require_permission(Permission.VALIDATE)),
 ) -> ValidationResult:
     if get_finding_store().get(finding_id) is None:
         raise HTTPException(status_code=404, detail=f"finding not found: {finding_id}")
@@ -94,7 +97,10 @@ def validate_finding(
 
 
 @router.get("/{finding_id}/validation", response_model=ValidationResult)
-def get_validation(finding_id: str) -> ValidationResult:
+def get_validation(
+    finding_id: str,
+    user: User = Depends(require_permission(Permission.VIEW_VALIDATION)),
+) -> ValidationResult:
     result = get_validation_store().get(finding_id)
     if result is None:
         raise HTTPException(

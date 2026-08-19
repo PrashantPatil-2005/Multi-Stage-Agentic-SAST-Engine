@@ -11,11 +11,13 @@ import shutil
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.api.dashboard_models import DashboardProject
 from app.api.schemas import FileMeta, ProjectDetail, ProjectOut, ScanResponse
 from app.approval.store import get_approval_store
+from app.auth.models import User
+from app.auth.rbac import Permission, require_permission
 from app.core.contracts import RepoSpec
 from app.db.models import Project
 from app.dedup.service import remove_findings
@@ -67,7 +69,11 @@ def _remove_project_workspace(request: Request, project_id: str, snapshot_path: 
 
 
 @router.post("", response_model=ProjectOut, status_code=201)
-def create_project(payload: RepoSpec, request: Request) -> ProjectOut:
+def create_project(
+    payload: RepoSpec,
+    request: Request,
+    user: User = Depends(require_permission(Permission.CREATE_REPOSITORY)),
+) -> ProjectOut:
     project_id = uuid4().hex
     service = _prepare_service(request)
     try:
@@ -109,7 +115,11 @@ def create_project(payload: RepoSpec, request: Request) -> ProjectOut:
 
 
 @router.post("/{project_id}/scan", response_model=ScanResponse)
-def scan_project(project_id: str, request: Request) -> ScanResponse:
+def scan_project(
+    project_id: str,
+    request: Request,
+    user: User = Depends(require_permission(Permission.SCAN)),
+) -> ScanResponse:
     """Run the existing SCAN stage on a prepared project's stored CodeModel.
 
     Synchronous: the route finishes when the scan has run. A durable
@@ -153,7 +163,10 @@ def scan_project(project_id: str, request: Request) -> ScanResponse:
 
 
 @router.get("", response_model=list[DashboardProject])
-def list_projects(request: Request) -> list[DashboardProject]:
+def list_projects(
+    request: Request,
+    user: User = Depends(require_permission(Permission.VIEW_REPOSITORIES)),
+) -> list[DashboardProject]:
     """List ingested repositories (id + name), newest first."""
     with request.app.state.session_factory() as session:
         rows = session.query(Project).order_by(Project.created_at.desc()).all()
@@ -161,7 +174,11 @@ def list_projects(request: Request) -> list[DashboardProject]:
 
 
 @router.post("/{project_id}/reprepare", response_model=ProjectOut)
-def reprepare_project(project_id: str, request: Request) -> ProjectOut:
+def reprepare_project(
+    project_id: str,
+    request: Request,
+    user: User = Depends(require_permission(Permission.REPREPARE)),
+) -> ProjectOut:
     """Re-run PREPARE against the existing workspace copy of the repository.
 
     Rebuilds ``snapshot.json`` and ``codemodel.json`` from the already-fetched
@@ -223,7 +240,11 @@ def reprepare_project(project_id: str, request: Request) -> ProjectOut:
 
 
 @router.delete("/{project_id}", status_code=204)
-def delete_project(project_id: str, request: Request) -> None:
+def delete_project(
+    project_id: str,
+    request: Request,
+    user: User = Depends(require_permission(Permission.DELETE_REPOSITORY)),
+) -> None:
     """Delete a repository and every pipeline record it owns.
 
     Cascades over the persisted lineage (project -> scan runs -> findings)
@@ -280,7 +301,11 @@ def delete_project(project_id: str, request: Request) -> None:
 
 
 @router.get("/{project_id}", response_model=ProjectDetail)
-def get_project(project_id: str, request: Request) -> ProjectDetail:
+def get_project(
+    project_id: str,
+    request: Request,
+    user: User = Depends(require_permission(Permission.VIEW_REPOSITORIES)),
+) -> ProjectDetail:
     with request.app.state.session_factory() as session:
         project = session.get(Project, project_id)
         if project is None:

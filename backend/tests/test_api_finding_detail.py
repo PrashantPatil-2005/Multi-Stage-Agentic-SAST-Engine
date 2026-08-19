@@ -178,18 +178,18 @@ def test_finding_detail_enriched_with_approval(client):
     _prove(sql)
     created = client.post(
         f"/api/findings/{sql.id}/approval",
-        json={"action": "remediation", "requested_by": "system"},
+        json={"action": "remediation", "requested_by": "manager"},
     )
     assert created.status_code == 200
     client.post(
         f"/api/approvals/{created.json()['id']}/approve",
-        json={"reviewed_by": "security-lead", "reason": "verified"},
+        json={"reason": "verified"},
     )
 
     body = client.get(f"/api/findings/{sql.id}").json()
     assert body["approval"]["status"] == "approved"
-    assert body["approval"]["requested_by"] == "system"
-    assert body["approval"]["reviewed_by"] == "security-lead"
+    assert body["approval"]["requested_by"] == "manager"
+    assert body["approval"]["reviewed_by"] == "manager"
     assert body["approval"]["reason"] == "verified"
 
 

@@ -8,7 +8,10 @@ aggregation (counts, ordering, frozen remaining-time snapshots).
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+
+from app.auth.dependencies import get_current_user
+from app.auth.models import User
 
 from app.api.risk_models import (
     EscalationRow,
@@ -68,7 +71,7 @@ def _sla_row(record: SLARecord, now: datetime, findings: dict) -> SlaRow:
 
 
 @router.get("/summary", response_model=RiskSummary)
-def risk_summary() -> RiskSummary:
+def risk_summary(user: User = Depends(get_current_user)) -> RiskSummary:
     findings = {f.id: f for f in get_finding_store().all()}
     validations = {v.finding_id: v for v in get_validation_store().all()}
     proofs = {p.finding_id: p for p in get_proof_store().all()}

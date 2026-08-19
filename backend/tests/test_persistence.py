@@ -9,7 +9,9 @@ is re-run after the restart.
 from fastapi.testclient import TestClient
 
 from app.api.routes.validations import get_validation_service
+from app.auth.seed import DEMO_PASSWORD
 from app.config import Settings
+from app.db.session import init_db, make_engine, make_session_factory
 from app.main import create_app
 from app.validate.service import ValidationService
 from tests.fake_llm_provider import FakeLLMProvider
@@ -29,7 +31,29 @@ def _client(settings: Settings, fake_validation: bool = False) -> TestClient:
         app.dependency_overrides[get_validation_service] = lambda: ValidationService(
             provider=FakeLLMProvider(verdict="true_positive", confidence=0.94)
         )
-    return TestClient(app)
+    # Manually set up app state that the lifespan normally provides
+    # (TestClient without 'with' does not trigger the lifespan)
+    if not hasattr(app.state, "session_factory"):
+        engine = make_engine(settings.database_url)
+        init_db(engine)
+        sf = make_session_factory(engine)
+        app.state.settings = settings
+        app.state.session_factory = sf
+        app.state.prepare_service = None  # not needed for these tests
+        # Seed demo users
+        db = sf()
+        try:
+            from app.auth.seed import seed_demo_users
+            seed_demo_users(db)
+        finally:
+            db.close()
+    tc = TestClient(app)
+    # Log in as manager (full permissions) for all API calls
+    tc.post(
+        "/api/auth/login",
+        json={"username": "manager", "password": DEMO_PASSWORD},
+    )
+    return tc
 
 
 def _create_and_scan(client: TestClient, fixture_repo, name: str = "persist-app"):
@@ -88,7 +112,7 @@ def test_downstream_state_survives_restart(tmp_path, fixture_repo):
         approval = client.post(f"/api/findings/{fid}/approval").json()
         decided = client.post(
             f"/api/approvals/{approval['id']}/approve",
-            json={"reviewed_by": "persist-reviewer", "reason": "decision survives restart"},
+            json={"reason": "decision survives restart"},
         ).json()
         assert decided["status"] == "approved"
         history = client.get(f"/api/approvals/{approval['id']}/history").json()
@@ -111,7 +135,7 @@ def test_downstream_state_survives_restart(tmp_path, fixture_repo):
         assert detail["validation"] == validation
         assert detail["proof"]["status"] == "verified"
         assert detail["approval"]["status"] == "approved"
-        assert detail["approval"]["reviewed_by"] == "persist-reviewer"
+        assert detail["approval"]["reviewed_by"] == "manager"
         assert detail["sla"]["priority"] == sla["priority"]
 
         listed = client.get("/api/findings").json()

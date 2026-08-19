@@ -30,6 +30,7 @@ import pytest
 
 from app.api.routes.validations import get_validation_service
 from app.approval.store import get_approval_store
+from app.auth.seed import DEMO_PASSWORD
 from app.config import Settings
 from app.dedup.service import reset_groups
 from app.main import create_app
@@ -80,7 +81,27 @@ def _settings(tmp_path, db_name: str = "golden-14l.db") -> Settings:
 
 
 def _client(settings: Settings) -> TestClient:
-    return TestClient(create_app(settings))
+    app = create_app(settings)
+    from app.db.session import init_db, make_engine, make_session_factory
+    if not hasattr(app.state, "session_factory"):
+        engine = make_engine(settings.database_url)
+        init_db(engine)
+        sf = make_session_factory(engine)
+        app.state.settings = settings
+        app.state.session_factory = sf
+        app.state.prepare_service = None
+        db = sf()
+        try:
+            from app.auth.seed import seed_demo_users
+            seed_demo_users(db)
+        finally:
+            db.close()
+    tc = TestClient(app)
+    tc.post(
+        "/api/auth/login",
+        json={"username": "manager", "password": DEMO_PASSWORD},
+    )
+    return tc
 
 
 def _create_project(client: TestClient, fixture_repo, name: str = "golden-app"):
@@ -251,7 +272,7 @@ def test_golden_pipeline_all_stages_truthful(validated_client, fixture_repo):
         f"/api/findings/{fid}/approval",
         json={
             "action": "remediation",
-            "requested_by": "system",
+            "requested_by": "manager",
             "scan_run_id": run_id,
         },
     )
@@ -393,7 +414,7 @@ def test_cross_run_and_cross_project_isolation(validated_client, fixture_repo):
         f"/api/findings/{fid}/approval",
         json={
             "action": "remediation",
-            "requested_by": "system",
+            "requested_by": "manager",
             "scan_run_id": a2["scan_run_id"],
         },
     ).json()
@@ -425,7 +446,7 @@ def test_cross_run_and_cross_project_isolation(validated_client, fixture_repo):
         (f"/api/findings/{fid}/prove", {"scan_run_id": b1["scan_run_id"]}),
         (
             f"/api/findings/{fid}/approval",
-            {"action": "remediation", "requested_by": "system", "scan_run_id": b1["scan_run_id"]},
+            {"action": "remediation", "requested_by": "manager", "scan_run_id": b1["scan_run_id"]},
         ),
     ]:
         resp = client.post(url, json=body)
@@ -448,7 +469,7 @@ def test_cross_run_and_cross_project_isolation(validated_client, fixture_repo):
         (f"/api/findings/{fid}/prove", {"scan_run_id": "does-not-exist"}),
         (
             f"/api/findings/{fid}/approval",
-            {"action": "remediation", "requested_by": "system", "scan_run_id": "does-not-exist"},
+            {"action": "remediation", "requested_by": "manager", "scan_run_id": "does-not-exist"},
         ),
     ]:
         resp = client.post(url, json=body)
@@ -507,7 +528,7 @@ def test_full_golden_workflow_survives_restart(tmp_path, fixture_repo):
             f"/api/findings/{fid}/approval",
             json={
                 "action": "remediation",
-                "requested_by": "system",
+                "requested_by": "manager",
                 "scan_run_id": run_id,
             },
         ).json()
@@ -784,7 +805,7 @@ def test_approval_request_failure_then_retry(validated_client, fixture_repo):
         f"/api/findings/{fid}/approval",
         json={
             "action": "remediation",
-            "requested_by": "system",
+            "requested_by": "manager",
             "scan_run_id": run_id,
         },
     )
@@ -805,7 +826,7 @@ def test_approval_request_failure_then_retry(validated_client, fixture_repo):
         f"/api/findings/{fid}/approval",
         json={
             "action": "remediation",
-            "requested_by": "system",
+            "requested_by": "manager",
             "scan_run_id": run_id,
         },
     )
@@ -832,7 +853,7 @@ def test_approval_terminal_states_are_truthful(validated_client, fixture_repo):
         f"/api/findings/{fid}/approval",
         json={
             "action": "remediation",
-            "requested_by": "system",
+            "requested_by": "manager",
             "scan_run_id": run_id,
         },
     ).json()
@@ -879,7 +900,7 @@ def test_approval_rejection_is_completed_transition(validated_client, fixture_re
         f"/api/findings/{fid}/approval",
         json={
             "action": "remediation",
-            "requested_by": "system",
+            "requested_by": "manager",
             "scan_run_id": run_id,
         },
     ).json()

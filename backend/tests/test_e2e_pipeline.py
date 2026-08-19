@@ -170,15 +170,16 @@ def test_full_pipeline_prepare_to_approval(fake_validation, client, fixture_repo
     assert a["finding_id"] == fid
     assert a["status"] == "pending"
     assert a["requested_at"]
-    assert a["requested_by"] == "system"
+    assert a["requested_by"] == "manager"
 
     decided = client.post(
         f"/api/approvals/{approval_id}/approve",
-        json={"reviewed_by": "e2e-reviewer", "reason": "controlled e2e decision"},
+        json={"reason": "controlled e2e decision"},
     )
     assert decided.status_code == 200
     assert decided.json()["status"] == "approved"
-    assert decided.json()["reviewed_by"] == "e2e-reviewer"
+    # reviewed_by is now derived from the authenticated user
+    assert decided.json()["reviewed_by"] == "manager"
     history = client.get(f"/api/approvals/{approval_id}/history")
     assert history.status_code == 200
     assert len(history.json()) >= 2
@@ -378,7 +379,7 @@ def test_real_hugging_face_pipeline_smoke(client, fixture_repo, llm_smoke_select
     assert a["status"] == "pending"
     decided = client.post(
         f"/api/approvals/{a['id']}/approve",
-        json={"reviewed_by": "e2e-reviewer", "reason": "controlled smoke decision"},
+        json={"reason": "controlled smoke decision"},
     )
     assert decided.status_code == 200
     assert decided.json()["status"] == "approved"

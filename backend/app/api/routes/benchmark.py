@@ -7,10 +7,12 @@ GET  /api/benchmarks/{benchmark_id} - stored benchmark report
 Errors: 404 (unknown fixture / unknown benchmark), 422 (invalid fixture name).
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 
 from app.api.benchmark_models import BenchmarkList, BenchmarkSummary
+from app.auth.models import User
+from app.auth.rbac import Permission, require_permission
 from app.benchmark.ground_truth import get_ground_truth
 from app.benchmark.models import BenchmarkReport
 from app.benchmark.service import (
@@ -61,7 +63,9 @@ def _to_summary(report: BenchmarkReport) -> BenchmarkSummary:
 
 
 @router.get("", response_model=BenchmarkList)
-def list_benchmarks() -> BenchmarkList:
+def list_benchmarks(
+    user: User = Depends(require_permission(Permission.VIEW_BENCHMARK)),
+) -> BenchmarkList:
     reports = list_reports()
     return BenchmarkList(
         has_reports=bool(reports),
@@ -70,7 +74,10 @@ def list_benchmarks() -> BenchmarkList:
 
 
 @router.post("/semgrep", response_model=BenchmarkReport)
-def run_benchmark(body: BenchmarkRequest) -> BenchmarkReport:
+def run_benchmark(
+    body: BenchmarkRequest,
+    user: User = Depends(require_permission(Permission.RUN_BENCHMARK)),
+) -> BenchmarkReport:
     try:
         return _service().run(body.fixture)
     except InvalidFixtureNameError as exc:
@@ -80,7 +87,10 @@ def run_benchmark(body: BenchmarkRequest) -> BenchmarkReport:
 
 
 @router.get("/{benchmark_id}", response_model=BenchmarkReport)
-def get_benchmark(benchmark_id: str) -> BenchmarkReport:
+def get_benchmark(
+    benchmark_id: str,
+    user: User = Depends(require_permission(Permission.VIEW_BENCHMARK)),
+) -> BenchmarkReport:
     report = get_report(benchmark_id)
     if report is None:
         raise HTTPException(

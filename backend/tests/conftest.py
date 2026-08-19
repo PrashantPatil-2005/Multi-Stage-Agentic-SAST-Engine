@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from app.config import Settings
+from app.auth.seed import DEMO_PASSWORD
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -39,10 +40,22 @@ def service(settings):
 
 @pytest.fixture
 def client(settings):
+    """TestClient pre-authenticated as the demo manager (full permissions).
+
+    Existing tests rely on this fixture and do not supply authentication
+    themselves, so the fixture logs in as 'manager' to avoid 401/403 on
+    every endpoint call.
+    """
     from fastapi.testclient import TestClient
 
     from app.main import create_app
 
     app = create_app(settings)
     with TestClient(app) as test_client:
+        # Log in as manager (has all permissions including approve/delete)
+        resp = test_client.post(
+            "/api/auth/login",
+            json={"username": "manager", "password": DEMO_PASSWORD},
+        )
+        assert resp.status_code == 200, f"conftest login failed: {resp.text}"
         yield test_client

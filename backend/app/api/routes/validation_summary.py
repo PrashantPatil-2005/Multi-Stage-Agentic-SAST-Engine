@@ -6,7 +6,10 @@ and nothing is ever mutated; the only computation is presentation-level
 aggregation (counts, ordering, field joins).
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+
+from app.auth.dependencies import get_current_user
+from app.auth.models import User
 
 from app.api.validation_models import (
     ValidationKpi,
@@ -24,7 +27,7 @@ router = APIRouter(prefix="/validation", tags=["validation-summary"])
 
 
 @router.get("", response_model=ValidationSummary)
-def validation_summary() -> ValidationSummary:
+def validation_summary(user: User = Depends(get_current_user)) -> ValidationSummary:
     findings = {f.id: f for f in get_finding_store().all()}
     validations = get_validation_store().all()
     proofs = {p.finding_id: p for p in get_proof_store().all()}

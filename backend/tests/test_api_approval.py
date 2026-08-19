@@ -69,7 +69,7 @@ def test_full_approval_workflow_via_api(client):
     finding = _register_proven_sqli()
     created = client.post(
         f"/api/findings/{finding.id}/approval",
-        json={"action": "remediation", "requested_by": "system"},
+        json={"action": "remediation"},
     )
     assert created.status_code == 200
     body = created.json()
@@ -79,11 +79,11 @@ def test_full_approval_workflow_via_api(client):
 
     approved = client.post(
         f"/api/approvals/{approval_id}/approve",
-        json={"reviewed_by": "security-analyst", "reason": "Verified and proof reviewed."},
+        json={"reason": "Verified and proof reviewed."},
     )
     assert approved.status_code == 200
     assert approved.json()["status"] == "approved"
-    assert approved.json()["reviewed_by"] == "security-analyst"
+    assert approved.json()["reviewed_by"] == "manager"
 
     history = client.get(f"/api/approvals/{approval_id}/history")
     assert history.status_code == 200
@@ -103,7 +103,7 @@ def test_rejection_workflow_via_api(client):
     ).json()["id"]
     rejected = client.post(
         f"/api/approvals/{approval_id}/reject",
-        json={"reviewed_by": "security-analyst", "reason": "Risk accepted."},
+        json={"reason": "Risk accepted."},
     )
     assert rejected.status_code == 200
     assert rejected.json()["status"] == "rejected"
@@ -118,20 +118,20 @@ def test_changes_workflow_via_api(client):
     ).json()["id"]
     changed = client.post(
         f"/api/approvals/{approval_id}/request-changes",
-        json={"reviewed_by": "analyst", "reason": "Need additional evidence."},
+        json={"reason": "Need additional evidence."},
     )
     assert changed.status_code == 200
     assert changed.json()["status"] == "changes_requested"
     resubmitted = client.post(
         f"/api/approvals/{approval_id}/resubmit",
-        json={"reviewed_by": "analyst", "reason": "Evidence added."},
+        json={"reason": "Evidence added."},
     )
     assert resubmitted.status_code == 200
     assert resubmitted.json()["status"] == "pending"
     assert resubmitted.json()["version"] == 2
     approved = client.post(
         f"/api/approvals/{approval_id}/approve",
-        json={"reviewed_by": "analyst", "reason": "OK."},
+        json={"reason": "OK."},
     )
     assert approved.json()["status"] == "approved"
 
@@ -165,7 +165,7 @@ def test_unknown_finding_404(client):
 def test_unknown_approval_404(client):
     response = client.post(
         "/api/approvals/does-not-exist/approve",
-        json={"reviewed_by": "a", "reason": "ok"},
+        json={"reason": "ok"},
     )
     assert response.status_code == 404
 
@@ -175,23 +175,27 @@ def test_invalid_transition_409(client):
     approval_id = client.post(f"/api/findings/{finding.id}/approval").json()["id"]
     client.post(
         f"/api/approvals/{approval_id}/reject",
-        json={"reviewed_by": "a", "reason": "no"},
+        json={"reason": "no"},
     )
     response = client.post(
         f"/api/approvals/{approval_id}/approve",
-        json={"reviewed_by": "a", "reason": "ok"},
+        json={"reason": "ok"},
     )
     assert response.status_code == 409
     assert "not allowed" in response.json()["detail"]
 
 
 def test_missing_reviewer_422(client):
+    """Reviewer is now server-derived, so this test is no longer applicable.
+    The reviewed_by field is removed from the request body."""
     finding = _register_proven_sqli()
     approval_id = client.post(f"/api/findings/{finding.id}/approval").json()["id"]
+    # reviewed_by is no longer in the request body; approval should work
     response = client.post(
         f"/api/approvals/{approval_id}/approve", json={"reason": "ok"}
     )
-    assert response.status_code == 422
+    assert response.status_code == 200
+    assert response.json()["reviewed_by"] == "manager"
 
 
 def test_blank_reason_422(client):
@@ -199,7 +203,7 @@ def test_blank_reason_422(client):
     approval_id = client.post(f"/api/findings/{finding.id}/approval").json()["id"]
     response = client.post(
         f"/api/approvals/{approval_id}/approve",
-        json={"reviewed_by": "a", "reason": "   "},
+        json={"reason": "   "},
     )
     assert response.status_code == 422
 

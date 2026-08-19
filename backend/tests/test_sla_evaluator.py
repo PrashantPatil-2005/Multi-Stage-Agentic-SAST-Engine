@@ -231,6 +231,8 @@ def test_evaluator_breach_persists_across_restart(tmp_path):
     )
 
     with TestClient(create_app(settings)) as client:
+        from app.auth.seed import DEMO_PASSWORD
+        client.post("/api/auth/login", json={"username": "manager", "password": DEMO_PASSWORD})
         get_finding_store().add_report(report)
         client.post(f"/api/findings/{finding.id}/risk")
         client.post(f"/api/findings/{finding.id}/sla")
@@ -240,6 +242,8 @@ def test_evaluator_breach_persists_across_restart(tmp_path):
         assert client.get(f"/api/findings/{finding.id}/sla").json()["status"] == "breached"
 
     with TestClient(create_app(settings)) as client:
+        from app.auth.seed import DEMO_PASSWORD
+        client.post("/api/auth/login", json={"username": "manager", "password": DEMO_PASSWORD})
         body = client.get(f"/api/findings/{finding.id}/sla").json()
         assert body["status"] == "breached"
         assert body["escalation_level"] == 1

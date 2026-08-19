@@ -7,7 +7,10 @@ is ever mutated; the only computation is presentation-level aggregation
 exposed - no payloads, commands, paths or artifacts.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+
+from app.auth.dependencies import get_current_user
+from app.auth.models import User
 
 from app.api.proof_models import (
     ProofKpi,
@@ -38,7 +41,7 @@ def _safe_policy(policy) -> SandboxPolicyInfo | None:
 
 
 @router.get("", response_model=ProofSummary)
-def proof_summary() -> ProofSummary:
+def proof_summary(user: User = Depends(get_current_user)) -> ProofSummary:
     findings = {f.id: f for f in get_finding_store().all()}
     proofs = get_proof_store().all()
     validations = {v.finding_id: v for v in get_validation_store().all()}

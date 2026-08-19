@@ -7,7 +7,10 @@ nothing is ever mutated.
 
 import logging
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
+
+from app.auth.dependencies import get_current_user
+from app.auth.models import User
 
 from app.api.dashboard_models import (
     DashboardActivityItem,
@@ -144,7 +147,10 @@ def _plural(count: int, singular: str, plural: str) -> str:
 
 
 @router.get("/summary", response_model=DashboardSummary)
-def dashboard_summary(request: Request) -> DashboardSummary:
+def dashboard_summary(
+    request: Request,
+    user: User = Depends(get_current_user),
+) -> DashboardSummary:
     finding_store = get_finding_store()
     findings = {f.id: f for f in finding_store.all()}
     validations = {v.finding_id: v for v in get_validation_store().all()}

@@ -12,9 +12,11 @@ unchanged - deduplication still runs, with no stage record.
 Missing finding ids return 404 with the offending ids listed.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.auth.models import User
+from app.auth.rbac import Permission, require_permission
 from app.dedup.models import DeduplicationGroup, DeduplicationResult
 from app.dedup.service import DeduplicationService, lookup_group
 from app.scan.run_models import STAGE_DEDUPLICATE
@@ -34,7 +36,10 @@ class DedupRequest(BaseModel):
 
 
 @router.post("/deduplicate", response_model=DeduplicationResult)
-def deduplicate_findings(body: DedupRequest) -> DeduplicationResult:
+def deduplicate_findings(
+    body: DedupRequest,
+    user: User = Depends(require_permission(Permission.DEDUPLICATE)),
+) -> DeduplicationResult:
     store = get_finding_store()
     missing = [fid for fid in body.finding_ids if store.get(fid) is None]
     if missing:
@@ -57,7 +62,10 @@ def deduplicate_findings(body: DedupRequest) -> DeduplicationResult:
 
 
 @router.get("/deduplication/{fingerprint}", response_model=DeduplicationGroup)
-def get_deduplication_group(fingerprint: str) -> DeduplicationGroup:
+def get_deduplication_group(
+    fingerprint: str,
+    user: User = Depends(require_permission(Permission.VIEW_FINDINGS)),
+) -> DeduplicationGroup:
     group = lookup_group(fingerprint)
     if group is None:
         raise HTTPException(

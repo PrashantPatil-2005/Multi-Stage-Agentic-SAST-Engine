@@ -117,7 +117,14 @@ def test_comparison_present_with_fake_semgrep_findings(monkeypatch):
     from app.config import Settings
     from fastapi.testclient import TestClient
 
-    with TestClient(create_app(Settings())) as client:
+    settings = Settings(database_url="sqlite:///:memory:", workspace_dir="/tmp/sast_test")
+    with TestClient(create_app(settings)) as client:
+        from app.auth.seed import DEMO_PASSWORD
+        resp = client.post(
+            "/api/auth/login",
+            json={"username": "manager", "password": DEMO_PASSWORD},
+        )
+        assert resp.status_code == 200, f"login failed: {resp.text}"
         body = client.post(
             "/api/benchmarks/semgrep", json={"fixture": "vulnerable_python_app"}
         ).json()

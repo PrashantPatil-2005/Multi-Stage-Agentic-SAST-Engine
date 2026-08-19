@@ -9,6 +9,7 @@ from datetime import datetime
 
 import pytest
 
+from app.auth.seed import DEMO_PASSWORD
 from app.config import Settings
 from app.main import create_app
 from app.scan.run_store import get_scan_run_store
@@ -34,7 +35,27 @@ def _settings(tmp_path, db_name: str = "scanruns.db") -> Settings:
 
 
 def _client(settings: Settings) -> TestClient:
-    return TestClient(create_app(settings))
+    app = create_app(settings)
+    from app.db.session import init_db, make_engine, make_session_factory
+    if not hasattr(app.state, "session_factory"):
+        engine = make_engine(settings.database_url)
+        init_db(engine)
+        sf = make_session_factory(engine)
+        app.state.settings = settings
+        app.state.session_factory = sf
+        app.state.prepare_service = None
+        db = sf()
+        try:
+            from app.auth.seed import seed_demo_users
+            seed_demo_users(db)
+        finally:
+            db.close()
+    tc = TestClient(app)
+    tc.post(
+        "/api/auth/login",
+        json={"username": "manager", "password": DEMO_PASSWORD},
+    )
+    return tc
 
 
 def _create_project(client: TestClient, fixture_repo, name: str = "lineage-app"):

@@ -23,6 +23,7 @@ import pytest
 
 from app.api.routes.validations import get_validation_service
 from app.approval.store import get_approval_store
+from app.auth.seed import DEMO_PASSWORD
 from app.config import Settings
 from app.main import create_app
 from app.prove.models import ProofResult, SandboxPolicy
@@ -74,7 +75,27 @@ def _settings(tmp_path, db_name: str = "stage-14k.db") -> Settings:
 
 
 def _client(settings: Settings) -> TestClient:
-    return TestClient(create_app(settings))
+    app = create_app(settings)
+    from app.db.session import init_db, make_engine, make_session_factory
+    if not hasattr(app.state, "session_factory"):
+        engine = make_engine(settings.database_url)
+        init_db(engine)
+        sf = make_session_factory(engine)
+        app.state.settings = settings
+        app.state.session_factory = sf
+        app.state.prepare_service = None
+        db = sf()
+        try:
+            from app.auth.seed import seed_demo_users
+            seed_demo_users(db)
+        finally:
+            db.close()
+    tc = TestClient(app)
+    tc.post(
+        "/api/auth/login",
+        json={"username": "manager", "password": DEMO_PASSWORD},
+    )
+    return tc
 
 
 def _create_project(client: TestClient, fixture_repo, name: str = "k-app"):
@@ -377,7 +398,7 @@ def test_approval_request_with_scan_run_id_records_execution(
         f"/api/findings/{finding_id}/approval",
         json={
             "action": "remediation",
-            "requested_by": "system",
+            "requested_by": "manager",
             "scan_run_id": run_id,
         },
     )
@@ -401,7 +422,7 @@ def test_approval_decision_inherits_run_context(
 
     created = validated_app.post(
         f"/api/findings/{finding_id}/approval",
-        json={"action": "remediation", "requested_by": "system", "scan_run_id": run_id},
+        json={"action": "remediation", "requested_by": "manager", "scan_run_id": run_id},
     ).json()
 
     resp = validated_app.post(
@@ -429,7 +450,7 @@ def test_approval_invalid_transition_records_failed_not_completed(
 
     created = validated_app.post(
         f"/api/findings/{finding_id}/approval",
-        json={"action": "remediation", "requested_by": "system", "scan_run_id": run_id},
+        json={"action": "remediation", "requested_by": "manager", "scan_run_id": run_id},
     ).json()
     assert (
         validated_app.post(
@@ -480,7 +501,7 @@ def test_approval_without_scan_run_id_backward_compatible(
 
     resp = validated_app.post(
         f"/api/findings/{finding_id}/approval",
-        json={"action": "remediation", "requested_by": "system"},
+        json={"action": "remediation", "requested_by": "manager"},
     )
     assert resp.status_code == 200
     assert resp.json()["scan_run_id"] is None
@@ -517,7 +538,7 @@ def test_multi_run_isolation(validated_app, fixture_repo, monkeypatch):
             f"/api/findings/{finding_id}/approval",
             json={
                 "action": "remediation",
-                "requested_by": "system",
+                "requested_by": "manager",
                 "scan_run_id": second["scan_run_id"],
             },
         ).status_code
@@ -558,7 +579,7 @@ def test_cross_project_run_context_rejected(validated_app, fixture_repo, monkeyp
         f"/api/findings/{finding_a}/approval",
         json={
             "action": "remediation",
-            "requested_by": "system",
+            "requested_by": "manager",
             "scan_run_id": scan_b["scan_run_id"],
         },
     )
@@ -586,7 +607,7 @@ def test_unknown_scan_run_rejected(validated_app, fixture_repo):
         f"/api/findings/{finding_id}/approval",
         json={
             "action": "remediation",
-            "requested_by": "system",
+            "requested_by": "manager",
             "scan_run_id": "does-not-exist",
         },
     )
@@ -656,7 +677,7 @@ def test_restart_preserves_14k_execution_history(
             f"/api/findings/{finding_id}/approval",
             json={
                 "action": "remediation",
-                "requested_by": "system",
+                "requested_by": "manager",
                 "scan_run_id": run_id,
             },
         ).json()

@@ -14,7 +14,10 @@ introduced and nothing is ever mutated.
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
+
+from app.auth.dependencies import get_current_user
+from app.auth.models import User
 
 from app.api.repositories_models import (
     RepositoryFindings,
@@ -184,7 +187,10 @@ def _summarize(project: Project, files: set[str] | None) -> RepositorySummary:
 
 
 @router.get("", response_model=RepositoryList)
-def list_repositories(request: Request) -> RepositoryList:
+def list_repositories(
+    request: Request,
+    user: User = Depends(get_current_user),
+) -> RepositoryList:
     with request.app.state.session_factory() as session:
         projects = (
             session.query(Project).order_by(Project.created_at.desc()).all()

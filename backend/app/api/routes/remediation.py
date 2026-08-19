@@ -21,9 +21,11 @@ Errors:
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from app.auth.models import User
+from app.auth.rbac import Permission, require_permission
 from app.remediation.models import RemediationRecord
 from app.remediation.service import (
     RemediationGateError,
@@ -60,7 +62,10 @@ def _handle_gate(exc: RemediationGateError) -> HTTPException:
 
 
 @router.get("/{finding_id}/remediation", response_model=RemediationRecord)
-def get_remediation(finding_id: str) -> RemediationRecord:
+def get_remediation(
+    finding_id: str,
+    user: User = Depends(require_permission(Permission.VIEW_REMEDIATION)),
+) -> RemediationRecord:
     record = get_remediation_store().get(finding_id)
     if record is None:
         raise HTTPException(
@@ -73,7 +78,11 @@ def get_remediation(finding_id: str) -> RemediationRecord:
 @router.post(
     "/{finding_id}/remediation/proposal", response_model=RemediationRecord
 )
-def propose_remediation(finding_id: str, request: Request) -> RemediationRecord:
+def propose_remediation(
+    finding_id: str,
+    request: Request,
+    user: User = Depends(require_permission(Permission.PROPOSE_REMEDIATION)),
+) -> RemediationRecord:
     _require_finding(finding_id)
     try:
         return _service(request).propose(
@@ -85,7 +94,10 @@ def propose_remediation(finding_id: str, request: Request) -> RemediationRecord:
 
 @router.post("/{finding_id}/remediation/apply", response_model=RemediationRecord)
 def apply_remediation(
-    finding_id: str, body: ApplyRequest, request: Request
+    finding_id: str,
+    body: ApplyRequest,
+    request: Request,
+    user: User = Depends(require_permission(Permission.APPLY_REMEDIATION)),
 ) -> RemediationRecord:
     _require_finding(finding_id)
     try:
@@ -99,7 +111,11 @@ def apply_remediation(
 
 
 @router.post("/{finding_id}/remediation/verify", response_model=RemediationRecord)
-def verify_remediation(finding_id: str, request: Request) -> RemediationRecord:
+def verify_remediation(
+    finding_id: str,
+    request: Request,
+    user: User = Depends(require_permission(Permission.VERIFY_REMEDIATION)),
+) -> RemediationRecord:
     _require_finding(finding_id)
     try:
         return _service(request).verify(

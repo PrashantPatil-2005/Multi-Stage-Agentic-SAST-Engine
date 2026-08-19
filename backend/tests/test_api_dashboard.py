@@ -234,7 +234,7 @@ def test_pending_approval_kpi_and_activity(client):
     _prove(finding)
     created = client.post(
         f"/api/findings/{finding.id}/approval",
-        json={"action": "remediation", "requested_by": "system"},
+        json={"action": "remediation", "requested_by": "manager"},
     )
     assert created.status_code == 200
     approval_id = created.json()["id"]

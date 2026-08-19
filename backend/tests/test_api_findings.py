@@ -144,7 +144,7 @@ def test_findings_list_enriched_with_approval(client):
     _prove(sql)
     created = client.post(
         f"/api/findings/{sql.id}/approval",
-        json={"action": "remediation", "requested_by": "system"},
+        json={"action": "remediation", "requested_by": "manager"},
     )
     assert created.status_code == 200
     client.post(

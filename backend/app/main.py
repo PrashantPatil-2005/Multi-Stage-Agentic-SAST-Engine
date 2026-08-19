@@ -2,10 +2,12 @@
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import (
     approval,
@@ -13,6 +15,7 @@ from app.api.routes import (
     dashboard,
     dedup,
     findings,
+    notifications,
     proofs,
     projects,
     proof_summary,
@@ -24,6 +27,8 @@ from app.api.routes import (
     validations,
     validation_summary,
 )
+from app.auth import routes as auth_routes
+from app.auth.seed import seed_demo_users
 from app.config import Settings, get_settings
 from app.db.persistence import configure_stores
 from app.db.session import init_db, make_engine, make_session_factory
@@ -57,6 +62,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.session_factory = session_factory
         app.state.prepare_service = prepare_service
         configure_stores(session_factory)
+        # Seed demo users (idempotent)
+        db = session_factory()
+        try:
+            seed_demo_users(db)
+        finally:
+            db.close()
         evaluator = SlaEvaluator(
             interval_seconds=settings.sla_check_interval_seconds
         )
@@ -93,12 +104,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(proof_summary.router, prefix="/api")
     app.include_router(remediation.router, prefix="/api")
     app.include_router(repositories.router, prefix="/api")
+    app.include_router(notifications.router, prefix="/api")
+    app.include_router(auth_routes.router, prefix="/api")
 
     @app.get("/api/health")
     def health() -> dict:
         from app.scan.run_models import STAGE_NAMES
 
         return {"status": "ok", "stage": STAGE_NAMES[0]}
+
+    # ── Serve frontend static files (production) ────────────────────────
+    # In production the frontend is built into ../frontend/dist relative to
+    # this file.  Mount the assets directory first so /api/* routes are not
+    # shadowed, then add a catch-all that returns index.html for SPA routing.
+    frontend_dist = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+    if frontend_dist.is_dir():
+        assets_dir = frontend_dist / "assets"
+        if assets_dir.is_dir():
+            app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="static-assets")
+
+        from fastapi.responses import FileResponse
+
+        index_html = frontend_dist / "index.html"
+
+        @app.get("/{full_path:path}", include_in_schema=False)
+        async def serve_spa(full_path: str) -> FileResponse:
+            # Serve the file if it exists under dist, otherwise fall back to index.html
+            file_candidate = frontend_dist / full_path
+            if full_path and file_candidate.is_file():
+                return FileResponse(str(file_candidate))
+            return FileResponse(str(index_html))
 
     return app
 

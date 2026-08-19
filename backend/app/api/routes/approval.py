@@ -13,7 +13,7 @@ Errors: 404 (missing finding/approval), 409 (gate failure or invalid
 transition), 422 (invalid request body, incl. naive datetimes).
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 
 from app.api.approval_models import ApprovalListItem
@@ -24,6 +24,8 @@ from app.approval.service import (
     InvalidTransitionError,
 )
 from app.approval.store import get_approval_store
+from app.auth.models import User
+from app.auth.rbac import Permission, require_permission
 from app.core.time import as_aware_utc
 from app.dedup.service import repo_label_for_file
 from app.risk.service import all_risk_assessments
@@ -47,12 +49,10 @@ _STATUS_RANK = {
 
 class ApprovalRequestIn(BaseModel):
     action: ApprovalAction = "remediation"
-    requested_by: str = "system"
     scan_run_id: str | None = None
 
 
 class ApprovalDecisionIn(BaseModel):
-    reviewed_by: str
     reason: str | None = None
 
     @field_validator("reason")
@@ -87,14 +87,14 @@ def _require_stage_context(scan_run_id: str, finding_id: str) -> None:
 
 
 def _transition(
-    approval_id: str, body: ApprovalDecisionIn, method: str
+    approval_id: str, body: ApprovalDecisionIn, method: str, user: User
 ) -> ApprovalRequest:
     request = _require_approval(approval_id)
     run_id = request.scan_run_id
 
     def _do_transition() -> ApprovalRequest:
         return getattr(ApprovalService(), method)(
-            approval_id, reviewed_by=body.reviewed_by, reason=body.reason
+            approval_id, reviewed_by=user.username, reason=body.reason
         )
 
     if run_id is None:
@@ -131,7 +131,9 @@ def _transition(
     "/findings/{finding_id}/approval", response_model=ApprovalRequest
 )
 def request_approval(
-    finding_id: str, body: ApprovalRequestIn | None = None
+    finding_id: str,
+    body: ApprovalRequestIn | None = None,
+    user: User = Depends(require_permission(Permission.REQUEST_APPROVAL)),
 ) -> ApprovalRequest:
     _require_finding(finding_id)
     payload = body or ApprovalRequestIn()
@@ -140,7 +142,7 @@ def request_approval(
         return ApprovalService().request_approval(
             finding_id,
             action=payload.action,
-            requested_by=payload.requested_by,
+            requested_by=user.username,
             scan_run_id=payload.scan_run_id,
         )
 
@@ -161,7 +163,10 @@ def request_approval(
 @router.get(
     "/findings/{finding_id}/approval", response_model=ApprovalRequest
 )
-def get_approval(finding_id: str) -> ApprovalRequest:
+def get_approval(
+    finding_id: str,
+    user: User = Depends(require_permission(Permission.VIEW_APPROVALS)),
+) -> ApprovalRequest:
     request = get_approval_store().find_for_finding(finding_id)
     if request is None:
         raise HTTPException(
@@ -173,15 +178,23 @@ def get_approval(finding_id: str) -> ApprovalRequest:
 @router.post(
     "/approvals/{approval_id}/approve", response_model=ApprovalRequest
 )
-def approve(approval_id: str, body: ApprovalDecisionIn) -> ApprovalRequest:
-    return _transition(approval_id, body, "approve")
+def approve(
+    approval_id: str,
+    body: ApprovalDecisionIn,
+    user: User = Depends(require_permission(Permission.APPROVE)),
+) -> ApprovalRequest:
+    return _transition(approval_id, body, "approve", user)
 
 
 @router.post(
     "/approvals/{approval_id}/reject", response_model=ApprovalRequest
 )
-def reject(approval_id: str, body: ApprovalDecisionIn) -> ApprovalRequest:
-    return _transition(approval_id, body, "reject")
+def reject(
+    approval_id: str,
+    body: ApprovalDecisionIn,
+    user: User = Depends(require_permission(Permission.REJECT)),
+) -> ApprovalRequest:
+    return _transition(approval_id, body, "reject", user)
 
 
 @router.post(
@@ -189,23 +202,31 @@ def reject(approval_id: str, body: ApprovalDecisionIn) -> ApprovalRequest:
     response_model=ApprovalRequest,
 )
 def request_changes(
-    approval_id: str, body: ApprovalDecisionIn
+    approval_id: str,
+    body: ApprovalDecisionIn,
+    user: User = Depends(require_permission(Permission.REQUEST_CHANGES)),
 ) -> ApprovalRequest:
-    return _transition(approval_id, body, "request_changes")
+    return _transition(approval_id, body, "request_changes", user)
 
 
 @router.post(
     "/approvals/{approval_id}/resubmit", response_model=ApprovalRequest
 )
-def resubmit(approval_id: str, body: ApprovalDecisionIn) -> ApprovalRequest:
+def resubmit(
+    approval_id: str,
+    body: ApprovalDecisionIn,
+    user: User = Depends(require_permission(Permission.RESUBMIT)),
+) -> ApprovalRequest:
     """changes_requested -> pending (new review cycle, version + 1)."""
-    return _transition(approval_id, body, "resubmit")
+    return _transition(approval_id, body, "resubmit", user)
 
 
 @router.get(
     "/approvals", response_model=list[ApprovalListItem]
 )
-def list_approvals() -> list[ApprovalListItem]:
+def list_approvals(
+    user: User = Depends(require_permission(Permission.VIEW_APPROVALS)),
+) -> list[ApprovalListItem]:
     """Read-only review queue: every approval request with finding and
     risk context, pending first then newest request first. Never mutates
     approval state."""
@@ -251,6 +272,9 @@ def list_approvals() -> list[ApprovalListItem]:
 @router.get(
     "/approvals/{approval_id}/history", response_model=list[ApprovalEvent]
 )
-def get_history(approval_id: str) -> list[ApprovalEvent]:
+def get_history(
+    approval_id: str,
+    user: User = Depends(require_permission(Permission.VIEW_APPROVALS)),
+) -> list[ApprovalEvent]:
     _require_approval(approval_id)
     return ApprovalService().get_history(approval_id)

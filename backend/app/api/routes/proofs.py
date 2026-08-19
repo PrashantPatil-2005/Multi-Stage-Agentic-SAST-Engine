@@ -28,6 +28,8 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.auth.models import User
+from app.auth.rbac import Permission, require_permission
 from app.prove.models import ProofResult
 from app.prove.service import ProofGateError, ProofService
 from app.prove.store import get_proof_store
@@ -109,6 +111,7 @@ def prove_finding(
     finding_id: str,
     body: ProveRequest | None = None,
     service: ProofService = Depends(get_proof_service),
+    user: User = Depends(require_permission(Permission.PROVE)),
 ) -> ProofResult:
     if get_finding_store().get(finding_id) is None:
         raise HTTPException(status_code=404, detail=f"finding not found: {finding_id}")
@@ -150,7 +153,10 @@ def prove_finding(
 
 
 @router.get("/{finding_id}/proof", response_model=SafeProofDetail)
-def get_proof(finding_id: str) -> SafeProofDetail:
+def get_proof(
+    finding_id: str,
+    user: User = Depends(require_permission(Permission.VIEW_PROOF)),
+) -> SafeProofDetail:
     result = get_proof_store().get(finding_id)
     if result is None:
         raise HTTPException(
