@@ -398,6 +398,23 @@
 
 /* ------------------------------------------------- Responsive rules */
 
+.dash-role-subtitle {
+  margin: -12px 0 16px;
+  font-size: 13.5px;
+  color: var(--color-text-muted);
+}
+
+.dash-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dash-quick-action {
+  text-decoration: none;
+  white-space: nowrap;
+}
+
 @media (max-width: 1100px) {
   .dash-kpi-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -6,6 +6,16 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { ThemeProvider } from "./theme/ThemeContext";
 
+vi.mock("./context/AuthContext", () => ({
+  useAuth: () => ({
+    user: { role: "manager", username: "manager", display_name: "Security Manager" },
+    loading: false,
+    isAuthenticated: true,
+    login: vi.fn(),
+    logout: vi.fn(),
+  }),
+}));
+
 const EMPTY_SUMMARY = {
   projects: [],
   kpis: {

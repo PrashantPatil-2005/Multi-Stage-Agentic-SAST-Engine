@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
+import { useAuth } from "./context/AuthContext";
+import { LoginPage } from "./pages/LoginPage";
 import { ApprovalsPage } from "./pages/ApprovalsPage";
 import { BenchmarkPage } from "./pages/BenchmarkPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -37,6 +39,7 @@ const PAGES: PageSpec[] = [
 ];
 
 export default function App() {
+  const { user, loading } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const location = useLocation();
@@ -76,6 +79,24 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [drawerOpen]);
 
+  /* Loading state */
+  if (loading) {
+    return (
+      <div className="shell">
+        <div className="shell__main">
+          <main className="shell__content" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <p>Loading…</p>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  /* Not authenticated → show login */
+  if (!user) {
+    return <LoginPage />;
+  }
+
   return (
     <div className="shell">
       <div
@@ -101,6 +122,7 @@ export default function App() {
         <TopBar title={route.title} onOpenDrawer={() => setDrawerOpen(true)} />
         <main className="shell__content">
           <Routes>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/findings" element={<FindingsPage />} />
             <Route path="/findings/:id" element={<FindingDetailPage />} />

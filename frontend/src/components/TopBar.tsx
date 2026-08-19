@@ -6,6 +6,7 @@ import {
   SunIcon,
 } from "./icons";
 import { useTheme } from "../theme/ThemeContext";
+import { useAuth } from "../context/AuthContext";
 import { IconButton } from "./ui/IconButton";
 import "./topbar.css";
 
@@ -16,6 +17,16 @@ interface TopBarProps {
 
 export function TopBar({ title, onOpenDrawer }: TopBarProps) {
   const { theme, toggleTheme } = useTheme();
+  const { user } = useAuth();
+
+  const initials = user
+    ? user.display_name
+        .split(" ")
+        .map((w) => w[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2)
+    : "??";
 
   return (
     <header className="topbar">
@@ -69,13 +80,15 @@ export function TopBar({ title, onOpenDrawer }: TopBarProps) {
         <button
           type="button"
           className="topbar__profile"
-          aria-label="Profile menu (coming soon)"
+          aria-label="Profile"
           disabled
         >
           <span className="topbar__avatar" aria-hidden="true">
-            SA
+            {initials}
           </span>
-          <span className="topbar__profile-name">security-analyst</span>
+          <span className="topbar__profile-name">
+            {user?.display_name ?? "Unknown"}
+          </span>
         </button>
       </div>
     </header>

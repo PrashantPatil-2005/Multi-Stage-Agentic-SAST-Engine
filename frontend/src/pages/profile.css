@@ -1,4 +1,4 @@
-/* Profile page — static operator identity (no authentication). */
+/* Profile page — authenticated user identity. */
 
 .profile-identity {
   display: flex;
@@ -27,6 +27,12 @@
   color: var(--color-text);
 }
 
+.profile-identity__username {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
 .profile-identity__role {
   margin: 4px 0 0;
 }
@@ -36,4 +42,20 @@
   font-size: 12.5px;
   color: var(--color-text-muted);
   max-width: 480px;
+}
+
+.profile-logout-btn {
+  margin-top: 12px;
+  padding: 6px 14px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.profile-logout-btn:hover {
+  background: var(--color-border);
 }

@@ -1,11 +1,27 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DashboardSummary } from "../api/dashboard";
 import type { ScanRun } from "../api/scans";
 import { DashboardPage } from "./DashboardPage";
+
+/* ------------------------------------------------------------------ */
+/*  Auth mock                                                         */
+/* ------------------------------------------------------------------ */
+
+let mockUser: { role: string; username: string; display_name: string } | null = null;
+
+vi.mock("../context/AuthContext", () => ({
+  useAuth: () => ({
+    user: mockUser,
+    loading: false,
+    isAuthenticated: mockUser !== null,
+    login: vi.fn(),
+    logout: vi.fn(),
+  }),
+}));
 
 function makeSummary(overrides: Partial<DashboardSummary> = {}): DashboardSummary {
   return {
@@ -120,13 +136,20 @@ function mockApi({
   return fetchMock;
 }
 
-function renderPage() {
+function renderPage(role: string | null = null) {
+  mockUser = role
+    ? { role, username: role, display_name: role }
+    : null;
   return render(
     <MemoryRouter>
       <DashboardPage />
     </MemoryRouter>,
   );
 }
+
+beforeEach(() => {
+  mockUser = null;
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -494,5 +517,228 @@ describe("dashboard recent scan runs", () => {
     expect(
       await within(section).findByText("project-a"),
     ).toBeInTheDocument();
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  Role-based dashboard tests                                        */
+/* ------------------------------------------------------------------ */
+
+describe("role-based dashboard", () => {
+  it("analyst sees analyst dashboard with security workflow actions", async () => {
+    mockApi({ summary: makeSummary() });
+    renderPage("analyst");
+    expect(
+      await screen.findByText("Investigate findings, validate, and triage security issues."),
+    ).toBeInTheDocument();
+    const actions = screen.getByRole("list", { name: "Quick Actions" });
+    expect(within(actions).getByText("View Findings")).toBeInTheDocument();
+    expect(within(actions).getByText("Scan Repository")).toBeInTheDocument();
+    expect(within(actions).getByText("Validate Finding")).toBeInTheDocument();
+    expect(within(actions).getByText("Prove Finding")).toBeInTheDocument();
+    expect(within(actions).getByText("Assess Risk")).toBeInTheDocument();
+    expect(within(actions).getByText("Request Approval")).toBeInTheDocument();
+  });
+
+  it("manager sees manager dashboard with approval-focused actions", async () => {
+    mockApi({ summary: makeSummary() });
+    renderPage("manager");
+    expect(
+      await screen.findByText("Review approvals, oversee remediation, and manage security posture."),
+    ).toBeInTheDocument();
+    const actions = screen.getByRole("list", { name: "Quick Actions" });
+    expect(within(actions).getByText("Review Approvals")).toBeInTheDocument();
+    expect(within(actions).getByText("View Findings")).toBeInTheDocument();
+    expect(within(actions).getByText("Review Risk & SLA")).toBeInTheDocument();
+    expect(within(actions).getByText("View Remediation")).toBeInTheDocument();
+    expect(within(actions).getByText("View Benchmarks")).toBeInTheDocument();
+  });
+
+  it("developer sees developer dashboard with remediation actions", async () => {
+    mockApi({ summary: makeSummary() });
+    renderPage("developer");
+    expect(
+      await screen.findByText("Fix vulnerabilities and verify remediations."),
+    ).toBeInTheDocument();
+    const actions = screen.getByRole("list", { name: "Quick Actions" });
+    expect(within(actions).getByText("View Findings")).toBeInTheDocument();
+    expect(within(actions).getByText("View Remediation")).toBeInTheDocument();
+    expect(within(actions).getByText("Scan Repository")).toBeInTheDocument();
+    expect(within(actions).getByText("View Scan Runs")).toBeInTheDocument();
+  });
+
+  it("auditor sees read-only dashboard with navigation links", async () => {
+    mockApi({ summary: makeSummary() });
+    renderPage("auditor");
+    expect(
+      await screen.findByText("Read-only visibility into security posture and audit evidence."),
+    ).toBeInTheDocument();
+    const nav = screen.getByRole("list", { name: "Navigation" });
+    expect(within(nav).getByText("View Findings")).toBeInTheDocument();
+    expect(within(nav).getByText("View Risk & SLA")).toBeInTheDocument();
+    expect(within(nav).getByText("View Validation")).toBeInTheDocument();
+    expect(within(nav).getByText("View Proof")).toBeInTheDocument();
+    expect(within(nav).getByText("View Approvals")).toBeInTheDocument();
+    expect(within(nav).getByText("View Benchmarks")).toBeInTheDocument();
+  });
+
+  it("analyst does not see manager-only approval decision controls", async () => {
+    mockApi({ summary: makeSummary() });
+    renderPage("analyst");
+    await screen.findByRole("list", { name: "Quick Actions" });
+    const actions = screen.getByRole("list", { name: "Quick Actions" });
+    expect(within(actions).queryByText("Review Approvals")).not.toBeInTheDocument();
+  });
+
+  it("developer does not see manager-only approval controls", async () => {
+    mockApi({ summary: makeSummary() });
+    renderPage("developer");
+    await screen.findByRole("list", { name: "Quick Actions" });
+    const actions = screen.getByRole("list", { name: "Quick Actions" });
+    expect(within(actions).queryByText("Review Approvals")).not.toBeInTheDocument();
+    expect(within(actions).queryByText("Approve")).not.toBeInTheDocument();
+  });
+
+  it("auditor dashboard is read-only — no mutation buttons in quick actions", async () => {
+    mockApi({ summary: makeSummary() });
+    renderPage("auditor");
+    await screen.findByRole("list", { name: "Navigation" });
+    const nav = screen.getByRole("list", { name: "Navigation" });
+    expect(within(nav).queryByText("Scan Repository")).not.toBeInTheDocument();
+    expect(within(nav).queryByText("Validate Finding")).not.toBeInTheDocument();
+    expect(within(nav).queryByText("Prove Finding")).not.toBeInTheDocument();
+    expect(within(nav).queryByText("Assess Risk")).not.toBeInTheDocument();
+    expect(within(nav).queryByText("Request Approval")).not.toBeInTheDocument();
+    expect(within(nav).queryByText("Approve")).not.toBeInTheDocument();
+  });
+
+  it("role comes from AuthContext — no role from URL or localStorage", async () => {
+    mockApi({ summary: makeSummary() });
+    window.history.pushState({}, "", "/dashboard?role=manager");
+    renderPage("analyst");
+    expect(
+      await screen.findByText("Investigate findings, validate, and triage security issues."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Review approvals, oversee remediation"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("existing dashboard data still renders with role", async () => {
+    mockApi({ summary: makeSummary() });
+    renderPage("analyst");
+    expect(await screen.findByText("12")).toBeInTheDocument();
+    expect(screen.getByLabelText("Total Findings")).toBeInTheDocument();
+    expect(screen.getByLabelText("Critical / P0")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Pipeline" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Critical findings" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "SLA summary" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Verification" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Recent activity" })).toBeInTheDocument();
+  });
+
+  it("shows skeleton placeholders while loading", async () => {
+    const fetchMock: FetchMock = vi.fn(
+      () =>
+        new Promise<never>(() => {
+          /* never resolves during the test */
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    renderPage("analyst");
+    expect(screen.getByRole("heading", { name: "Overview", level: 1 })).toBeInTheDocument();
+    expect(document.querySelectorAll(".dash-skeleton").length).toBeGreaterThan(0);
+  });
+
+  it("shows an error state and recovers when Retry succeeds", async () => {
+    let failing = true;
+    const fetchMock: FetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (failing) {
+        throw new Error("network down");
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () =>
+          String(input).includes("/api/projects")
+            ? makeSummary().projects
+            : makeSummary(),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderPage("manager");
+    expect(
+      await screen.findByRole("alert", { name: "Security data error" }),
+    ).toBeInTheDocument();
+
+    failing = false;
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Pipeline" })).toBeInTheDocument();
+    });
+  });
+
+  it("role-specific sections do not fabricate data", async () => {
+    mockApi({ summary: makeSummary() });
+    renderPage("analyst");
+    await screen.findByRole("list", { name: "Quick Actions" });
+    // Quick actions are navigation links to real pages, not fabricated metrics
+    const actions = screen.getByRole("list", { name: "Quick Actions" });
+    expect(within(actions).getByText("View Findings")).toHaveAttribute("href", "/findings");
+    expect(within(actions).getByText("Scan Repository")).toHaveAttribute("href", "/repositories");
+    expect(within(actions).getByText("Validate Finding")).toHaveAttribute("href", "/validation");
+    expect(within(actions).getByText("Assess Risk")).toHaveAttribute("href", "/risk");
+  });
+
+  it("existing dashboard tests remain valid — no role shows no quick actions", async () => {
+    mockApi({ summary: makeSummary() });
+    renderPage();
+    await screen.findByRole("heading", { name: "Overview", level: 1 });
+    expect(screen.queryByRole("list", { name: "Quick Actions" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Navigation" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Investigate findings/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("auditor does not see the 'Go to Repositories' mutation banner link", async () => {
+    const summary = makeSummary({
+      projects: [],
+      kpis: {
+        total_findings: { available: false, value: 0 },
+        critical_p0: { available: false, value: 0 },
+        sla_breaches: { available: false, value: 0 },
+        pending_validation: { available: false, value: 0 },
+        pending_approval: { available: false, value: 0 },
+      },
+      pipeline: [],
+      critical_findings: [],
+      sla: {
+        available: false,
+        active: 0,
+        breached: 0,
+        highest_priority_breach: null,
+        escalation_count: 0,
+      },
+      verification: {
+        available: false,
+        true_positive: 0,
+        false_positive: 0,
+        uncertain: 0,
+        verified: 0,
+        not_verified: 0,
+        blocked: 0,
+        errors: 0,
+      },
+      recent_activity: [],
+    });
+    mockApi({ summary });
+    renderPage("auditor");
+    expect(
+      await screen.findByText(/No repositories yet/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Go to Repositories" }),
+    ).not.toBeInTheDocument();
   });
 });

@@ -1,6 +1,7 @@
 import type { ComponentType, SVGProps } from "react";
 import { NavLink } from "react-router-dom";
 
+import { useAuth } from "../context/AuthContext";
 import {
   ApprovalsIcon,
   BenchmarksIcon,
@@ -22,17 +23,38 @@ export interface NavItem {
   to: string;
   label: string;
   icon: ComponentType<SVGProps<SVGSVGElement>>;
+  roles?: string[]; // If undefined, visible to all
 }
 
 const PRIMARY_NAV: NavItem[] = [
   { to: "/dashboard", label: "Overview", icon: OverviewIcon },
-  { to: "/findings", label: "Findings", icon: FindingsIcon },
   { to: "/repositories", label: "Repositories", icon: RepositoriesIcon },
+  { to: "/findings", label: "Findings", icon: FindingsIcon },
   { to: "/risk", label: "Risk & SLA", icon: RiskIcon },
-  { to: "/validation", label: "Validation", icon: ValidationIcon },
-  { to: "/proof", label: "Proof", icon: ProofIcon },
-  { to: "/approvals", label: "Approvals", icon: ApprovalsIcon },
-  { to: "/benchmarks", label: "Benchmarks", icon: BenchmarksIcon },
+  {
+    to: "/validation",
+    label: "Validation",
+    icon: ValidationIcon,
+    roles: ["analyst", "manager", "developer"],
+  },
+  {
+    to: "/proof",
+    label: "Proof",
+    icon: ProofIcon,
+    roles: ["analyst", "manager", "developer"],
+  },
+  {
+    to: "/approvals",
+    label: "Approvals",
+    icon: ApprovalsIcon,
+    roles: ["manager"],
+  },
+  {
+    to: "/benchmarks",
+    label: "Benchmarks",
+    icon: BenchmarksIcon,
+    roles: ["analyst", "manager"],
+  },
 ];
 
 const SECONDARY_NAV: NavItem[] = [
@@ -50,13 +72,18 @@ interface SidebarProps {
 function NavItems({
   items,
   collapsed,
+  userRole,
 }: {
   items: NavItem[];
   collapsed: boolean;
+  userRole: string;
 }) {
+  const filtered = items.filter(
+    (item) => !item.roles || item.roles.includes(userRole)
+  );
   return (
     <ul className="sidebar__list">
-      {items.map((item) => (
+      {filtered.map((item) => (
         <li key={item.to}>
           <NavLink
             to={item.to}
@@ -82,6 +109,9 @@ export function Sidebar({
   drawerOpen,
   onCloseDrawer,
 }: SidebarProps) {
+  const { user, logout } = useAuth();
+  const userRole = user?.role ?? "";
+
   return (
     <nav
       className={`sidebar${collapsed ? " sidebar--collapsed" : ""}${
@@ -107,15 +137,28 @@ export function Sidebar({
       </div>
 
       <div className="sidebar__scroll">
-        <NavItems items={PRIMARY_NAV} collapsed={collapsed} />
+        <NavItems items={PRIMARY_NAV} collapsed={collapsed} userRole={userRole} />
 
         <div className="sidebar__section" aria-hidden="true">
           <span className="sidebar__section-label">Account</span>
         </div>
-        <NavItems items={SECONDARY_NAV} collapsed={collapsed} />
+        <NavItems items={SECONDARY_NAV} collapsed={collapsed} userRole={userRole} />
       </div>
 
       <div className="sidebar__footer">
+        {!collapsed && user && (
+          <div className="sidebar__user-info">
+            <span className="sidebar__user-name">{user.display_name}</span>
+            <span className="sidebar__user-role">{user.role}</span>
+            <button
+              className="sidebar__logout-btn"
+              onClick={logout}
+              title="Logout"
+            >
+              Logout
+            </button>
+          </div>
+        )}
         <IconButton
           label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           onClick={onToggleCollapse}

@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 
+import { useAuth } from "../context/AuthContext";
 import { useDashboard } from "../hooks/useDashboard";
 import { CriticalFindings } from "../components/dashboard/CriticalFindings";
 import { MetricCard } from "../components/dashboard/MetricCard";
@@ -12,6 +13,91 @@ import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { PageHeader } from "../components/ui/PageHeader";
 import "../components/dashboard/dashboard.css";
+
+/* ------------------------------------------------------------------ */
+/*  Role-specific quick actions                                        */
+/* ------------------------------------------------------------------ */
+
+interface QuickAction {
+  label: string;
+  to: string;
+}
+
+const ANALYST_ACTIONS: QuickAction[] = [
+  { label: "View Findings", to: "/findings" },
+  { label: "Scan Repository", to: "/repositories" },
+  { label: "Validate Finding", to: "/validation" },
+  { label: "Prove Finding", to: "/proof" },
+  { label: "Assess Risk", to: "/risk" },
+  { label: "Request Approval", to: "/approvals" },
+];
+
+const MANAGER_ACTIONS: QuickAction[] = [
+  { label: "Review Approvals", to: "/approvals" },
+  { label: "View Findings", to: "/findings" },
+  { label: "Review Risk & SLA", to: "/risk" },
+  { label: "View Remediation", to: "/findings" },
+  { label: "View Benchmarks", to: "/benchmarks" },
+];
+
+const DEVELOPER_ACTIONS: QuickAction[] = [
+  { label: "View Findings", to: "/findings" },
+  { label: "View Remediation", to: "/findings" },
+  { label: "Scan Repository", to: "/repositories" },
+  { label: "View Scan Runs", to: "/repositories" },
+];
+
+const AUDITOR_SECTIONS: QuickAction[] = [
+  { label: "View Findings", to: "/findings" },
+  { label: "View Risk & SLA", to: "/risk" },
+  { label: "View Validation", to: "/validation" },
+  { label: "View Proof", to: "/proof" },
+  { label: "View Approvals", to: "/approvals" },
+  { label: "View Benchmarks", to: "/benchmarks" },
+];
+
+function QuickActions({
+  title,
+  actions,
+}: {
+  title: string;
+  actions: QuickAction[];
+}) {
+  return (
+    <Card title={title}>
+      <div className="dash-quick-actions" role="list" aria-label={title}>
+        {actions.map((action) => (
+          <Link
+            key={action.to + action.label}
+            to={action.to}
+            className="ui-button ui-button--secondary ui-button--sm dash-quick-action"
+            role="listitem"
+          >
+            {action.label}
+          </Link>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function RoleSubtitle({ role }: { role: string }) {
+  const subtitles: Record<string, string> = {
+    analyst: "Investigate findings, validate, and triage security issues.",
+    manager: "Review approvals, oversee remediation, and manage security posture.",
+    developer: "Fix vulnerabilities and verify remediations.",
+    auditor: "Read-only visibility into security posture and audit evidence.",
+  };
+  return (
+    <p className="dash-role-subtitle" aria-label={`Dashboard for ${role}`}>
+      {subtitles[role] ?? "Security posture at a glance."}
+    </p>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Skeletons                                                         */
+/* ------------------------------------------------------------------ */
 
 function KpiSkeleton() {
   return (
@@ -48,13 +134,17 @@ export function DashboardPage({
   title = "Overview",
   description = "Security posture at a glance.",
 }: DashboardPageProps) {
+  const { user } = useAuth();
   const { summary, projects, loading, error, reload } = useDashboard();
+  const role = user?.role;
+
+  const pageDescription = role ? undefined : description;
 
   return (
     <>
       <PageHeader
         title={title}
-        description={description}
+        description={pageDescription}
         actions={
           projects.length > 0 ? (
             <label className="dash-repo-select">
@@ -80,6 +170,8 @@ export function DashboardPage({
           )
         }
       />
+
+      {role && <RoleSubtitle role={role} />}
 
       {loading ? (
         <div aria-busy="true">
@@ -116,16 +208,23 @@ export function DashboardPage({
                 No repositories yet — run a scan to populate the security
                 dashboard.
               </p>
-              <Link
-                className="ui-button ui-button--secondary ui-button--md"
-                to="/repositories"
-              >
-                Go to Repositories
-              </Link>
+              {role !== "auditor" && (
+                <Link
+                  className="ui-button ui-button--secondary ui-button--md"
+                  to="/repositories"
+                >
+                  Go to Repositories
+                </Link>
+              )}
             </div>
           ) : null}
 
-          <div className="dash-kpi-grid">
+          {/* ---- KPI cards ---- */}
+          <div
+            className="dash-kpi-grid"
+            role="region"
+            aria-label="Key metrics"
+          >
             <MetricCard
               label="Total Findings"
               available={summary.kpis.total_findings.available}
@@ -167,10 +266,26 @@ export function DashboardPage({
             />
           </div>
 
+          {/* ---- Pipeline ---- */}
           <div className="dash-column" style={{ marginBottom: 20 }}>
             <PipelineOverview stages={summary.pipeline} />
           </div>
 
+          {/* ---- Role-specific quick actions ---- */}
+          {role === "analyst" && (
+            <QuickActions title="Quick Actions" actions={ANALYST_ACTIONS} />
+          )}
+          {role === "manager" && (
+            <QuickActions title="Quick Actions" actions={MANAGER_ACTIONS} />
+          )}
+          {role === "developer" && (
+            <QuickActions title="Quick Actions" actions={DEVELOPER_ACTIONS} />
+          )}
+          {role === "auditor" && (
+            <QuickActions title="Navigation" actions={AUDITOR_SECTIONS} />
+          )}
+
+          {/* ---- Critical findings + SLA + Verification ---- */}
           <div className="dash-layout">
             <CriticalFindings findings={summary.critical_findings} />
             <div className="dash-column">
@@ -179,6 +294,7 @@ export function DashboardPage({
             </div>
           </div>
 
+          {/* ---- Recent activity + scan runs ---- */}
           <div className="dash-column" style={{ marginTop: 20 }}>
             <RecentActivity items={summary.recent_activity} />
             <RecentScanRuns

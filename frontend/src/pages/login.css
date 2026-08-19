@@ -1,0 +1,134 @@
+.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: var(--color-bg, #f5f5f5);
+}
+
+.login-card {
+  background: var(--color-surface, #fff);
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  padding: 40px;
+  width: 100%;
+  max-width: 420px;
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.login-header h1 {
+  font-size: 24px;
+  margin: 0 0 8px 0;
+  color: var(--color-text, #1a1a1a);
+}
+
+.login-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: var(--color-primary, #2563eb);
+  color: #fff;
+  padding: 3px 10px;
+  border-radius: 12px;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.login-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary, #666);
+}
+
+.login-input {
+  padding: 10px 12px;
+  border: 1px solid var(--color-border, #ddd);
+  border-radius: 6px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.login-input:focus {
+  border-color: var(--color-primary, #2563eb);
+}
+
+.login-button {
+  margin-top: 8px;
+  padding: 10px 16px;
+  background: var(--color-primary, #2563eb);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.login-button:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.login-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login-error {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.login-demo-accounts {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--color-border, #eee);
+}
+
+.login-demo-accounts h3 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 10px 0;
+  color: var(--color-text-secondary, #666);
+}
+
+.login-demo-accounts table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.login-demo-accounts th {
+  text-align: left;
+  padding: 4px 8px;
+  font-weight: 600;
+  color: var(--color-text-secondary, #888);
+  border-bottom: 1px solid var(--color-border, #eee);
+}
+
+.login-demo-accounts td {
+  padding: 4px 8px;
+  color: var(--color-text, #333);
+}
+
+.login-demo-accounts td:first-child {
+  font-family: monospace;
+}
