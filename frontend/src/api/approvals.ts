@@ -125,6 +125,7 @@ export async function submitApprovalDecision(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(decision),
+      credentials: "include",
     },
   );
   const payload: unknown = await response.json().catch(() => null);
@@ -157,6 +158,7 @@ export async function createApprovalRequest(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
+      credentials: "include",
     },
   );
   const payloadJson: unknown = await response.json().catch(() => null);

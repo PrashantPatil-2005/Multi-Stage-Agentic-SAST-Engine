@@ -86,6 +86,7 @@ export function runBenchmark(fixture: string): Promise<BenchmarkReport> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ fixture }),
+    credentials: "include",
   }).then((response) => {
     if (!response.ok) {
       throw new Error(`request failed: /api/benchmarks/semgrep (${response.status})`);

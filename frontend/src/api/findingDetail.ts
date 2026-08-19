@@ -151,6 +151,7 @@ export function isNotFoundError(error: unknown): boolean {
 export async function getFindingDetail(findingId: string): Promise<FindingDetail> {
   const response = await fetch(
     `/api/findings/${encodeURIComponent(findingId)}`,
+    { credentials: "include" },
   );
   if (response.status === 404) {
     throw new FindingApiError(404, `finding not found: ${findingId}`);

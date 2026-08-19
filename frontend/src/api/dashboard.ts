@@ -65,7 +65,7 @@ export interface DashboardSummary {
 }
 
 export async function fetchJson<T>(path: string): Promise<T> {
-  const response = await fetch(path);
+  const response = await fetch(path, { credentials: "include" });
   if (!response.ok) {
     throw new Error(`request failed: ${path} (${response.status})`);
   }

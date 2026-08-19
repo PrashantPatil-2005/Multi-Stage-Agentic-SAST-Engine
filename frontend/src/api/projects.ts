@@ -108,7 +108,7 @@ async function errorDetail(response: Response, path: string): Promise<string> {
 }
 
 export async function requestJson<T>(path: string, init: RequestInit): Promise<T> {
-  const response = await fetch(path, init);
+  const response = await fetch(path, { ...init, credentials: "include" });
   if (!response.ok) {
     throw new ProjectRequestError(await errorDetail(response, path), response.status);
   }
@@ -148,6 +148,7 @@ export function getProjectDetail(projectId: string): Promise<ProjectDetail> {
 export async function deleteProject(projectId: string): Promise<void> {
   const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, {
     method: "DELETE",
+    credentials: "include",
   });
   if (!response.ok) {
     throw new ProjectRequestError(

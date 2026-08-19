@@ -64,7 +64,7 @@ async function errorDetail(response: Response): Promise<string> {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, init);
+  const response = await fetch(path, { ...init, credentials: "include" });
   if (!response.ok) {
     throw new RemediationApiError(response.status, await errorDetail(response));
   }

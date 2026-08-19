@@ -25,6 +25,7 @@ export function getNotifications(): Promise<NotificationList> {
 export function markNotificationRead(notificationId: string): Promise<void> {
   return fetch(`/api/notifications/${encodeURIComponent(notificationId)}/read`, {
     method: "POST",
+    credentials: "include",
   }).then((response) => {
     if (!response.ok) {
       throw new Error(`Failed to mark notification as read: ${response.status}`);
@@ -35,6 +36,7 @@ export function markNotificationRead(notificationId: string): Promise<void> {
 export function markAllNotificationsRead(): Promise<void> {
   return fetch("/api/notifications/read-all", {
     method: "POST",
+    credentials: "include",
   }).then((response) => {
     if (!response.ok) {
       throw new Error(`Failed to mark all notifications as read: ${response.status}`);

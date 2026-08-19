@@ -47,7 +47,7 @@ export function getFindings(projectId?: string, search?: string): Promise<Findin
   if (search) params.set("search", search);
   const qs = params.toString();
   const url = qs ? `/api/findings?${qs}` : "/api/findings";
-  return fetch(url).then((response) => {
+  return fetch(url, { credentials: "include" }).then((response) => {
     if (!response.ok) {
       throw new FindingsRequestError(
         response.status,
