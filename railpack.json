@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "packages": {
+    "node": "22",
+    "python": "3.12"
+  },
+  "steps": {
+    "build-frontend": {
+      "inputs": [
+        { "local": true }
+      ],
+      "commands": [
+        { "cmd": "cd frontend && npm ci --prefer-offline --no-audit --no-fund", "customName": "Install frontend dependencies" },
+        { "cmd": "cd frontend && npm run build", "customName": "Build frontend" }
+      ]
+    },
+    "install-backend": {
+      "inputs": [
+        { "step": "packages:mise" },
+        { "step": "build-frontend" },
+        { "local": true }
+      ],
+      "commands": [
+        { "cmd": "cd backend && pip install --no-cache-dir .", "customName": "Install backend dependencies" }
+      ]
+    }
+  },
+  "deploy": {
+    "startCommand": "cd backend && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}",
+    "inputs": [
+      { "step": "packages:mise" },
+      { "step": "install-backend", "include": ["."] }
+    ]
+  }
+}
