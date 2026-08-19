@@ -7,6 +7,7 @@ server-side, and returns the authenticated User.  Use it via::
     def protected(user: User = Depends(get_current_user)):
         ...
 """
+from collections.abc import Generator
 
 from fastapi import Cookie, Depends, HTTPException, Request
 from sqlalchemy.orm import Session as DbSession
@@ -15,10 +16,14 @@ from app.auth.models import User
 from app.auth.service import SESSION_COOKIE_NAME, get_session, get_user_by_id
 
 
-def _get_db(request: Request) -> DbSession:
+def _get_db(request: Request) -> Generator[DbSession, None, None]:
     """Extract the SQLAlchemy session factory from app state."""
     factory = request.app.state.session_factory
-    return factory()
+    session = factory()
+    try:
+        yield session
+    finally:
+        session.close()
 
 
 def get_current_user(

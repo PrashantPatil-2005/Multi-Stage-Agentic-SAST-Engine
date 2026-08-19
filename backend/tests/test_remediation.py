@@ -422,11 +422,7 @@ def test_reprepare_missing_workspace_copy_409(client, tmp_path):
     )
     shutil.rmtree(project_dir / "repo")
     response = client.post(f"/api/projects/{project['id']}/reprepare")
-    assert response.status_code == 409
-
-
-# ------------------------------------------------------- project deletion
-
+    assert response.status_code == 409# ------------------------------------------------------- project deletion
 
 def test_delete_project_cascades_remediation_records(client, fixture_repo):
     project, finding_id = _finding_of_type(
@@ -439,3 +435,201 @@ def test_delete_project_cascades_remediation_records(client, fixture_repo):
     deleted = client.delete(f"/api/projects/{project['id']}")
     assert deleted.status_code in (200, 204)
     assert client.get(f"/api/findings/{finding_id}/remediation").status_code == 404
+
+
+# ===================================================== CONCATENATED SQL REGRESSION
+
+CONCAT_FIXTURE_DIR = Path(__file__).parent / "fixtures"
+CONCAT_FIXTURE_REPO = CONCAT_FIXTURE_DIR / "concat_sql_app"
+
+
+def _create_concat_project(client, name="concat-app"):
+    """Create a project from the concatenation fixture directory."""
+    resp = client.post(
+        "/api/projects",
+        json={
+            "name": name,
+            "source_type": "directory",
+            "location": str(CONCAT_FIXTURE_REPO),
+        },
+    )
+    assert resp.status_code == 201
+    return resp.json()
+
+
+def _validate_and_prove_concat(client, finding_id):
+    app = client.app
+    app.dependency_overrides[get_validation_service] = lambda: ValidationService(
+        provider=FakeLLMProvider(verdict="true_positive", confidence=0.94)
+    )
+    try:
+        resp = client.post(
+            f"/api/findings/{finding_id}/validate",
+            json={"provider": "openai_compatible"},
+        )
+        assert resp.status_code == 200
+    finally:
+        app.dependency_overrides.clear()
+    proof = client.post(f"/api/findings/{finding_id}/prove")
+    assert proof.status_code == 200
+    assert proof.json()["status"] == "verified"
+
+
+def _approve_remediation_concat(client, finding_id):
+    created = client.post(
+        f"/api/findings/{finding_id}/approval",
+        json={"action": "remediation", "requested_by": "manager"},
+    )
+    assert created.status_code == 200
+    aid = created.json()["id"]
+    approved = client.post(
+        f"/api/approvals/{aid}/approve",
+        json={"reviewed_by": "security-analyst", "reason": "Verified."},
+    )
+    assert approved.status_code == 200
+    return aid
+
+
+def test_concat_simple_parameterizes(client):
+    """Simple concatenation: sql = '...' + variable + '...' -> parameterized."""
+    project = _create_concat_project(client)
+    scan = client.post(f"/api/projects/{project['id']}/scan")
+    assert scan.status_code == 200
+    listed = client.get("/api/findings").json()
+    by_type = {item["finding_id"]: item for item in listed}
+    sql_findings = [f for f, item in by_type.items() if item["vulnerability_type"] == "sql_injection"]
+    assert len(sql_findings) >= 1
+
+    # Pick the finding whose source is query_by_name (simple concat)
+    target = None
+    for fid in sql_findings:
+        detail = client.get(f"/api/findings/{fid}").json()
+        if "query_by_name" in (detail.get("source", {}).get("snippet", "") or ""):
+            target = fid
+            break
+    if target is None:
+        # Fallback: just use the first SQL injection finding
+        target = sql_findings[0]
+
+    _validate_and_prove_concat(client, target)
+    _approve_remediation_concat(client, target)
+    resp = client.post(f"/api/findings/{target}/remediation/proposal")
+    assert resp.status_code == 200
+    record = resp.json()
+    assert record["status"] == "proposed"
+    proposal = record["proposal"]
+    assert proposal["strategy"] == "parameterize_query"
+    assert "?" in proposal["after"]
+    assert proposal["before"] != proposal["after"]
+
+
+def test_concat_chained_parameterizes(client):
+    """Chained concatenation with two variables."""
+    project = _create_concat_project(client)
+    scan = client.post(f"/api/projects/{project['id']}/scan")
+    assert scan.status_code == 200
+    listed = client.get("/api/findings").json()
+    by_type = {item["finding_id"]: item for item in listed}
+    sql_findings = [f for f, item in by_type.items() if item["vulnerability_type"] == "sql_injection"]
+    assert len(sql_findings) >= 1
+
+    # Find the finding with 2 parameters (query_with_status)
+    target = None
+    for fid in sql_findings:
+        detail = client.get(f"/api/findings/{fid}").json()
+        if "query_with_status" in (detail.get("source", {}).get("snippet", "") or ""):
+            target = fid
+            break
+    if target is None:
+        target = sql_findings[0]
+
+    _validate_and_prove_concat(client, target)
+    _approve_remediation_concat(client, target)
+    resp = client.post(f"/api/findings/{target}/remediation/proposal")
+    assert resp.status_code == 200
+    record = resp.json()
+    assert record["status"] == "proposed"
+    proposal = record["proposal"]
+    assert proposal["strategy"] == "parameterize_query"
+    # Should have at least 2 '?' placeholders
+    assert proposal["after"].count("?") >= 2
+
+
+def test_concat_augmented_assign_parameterizes(client):
+    """Augmented assignment: sql += '...' + variable -> parameterized."""
+    project = _create_concat_project(client)
+    scan = client.post(f"/api/projects/{project['id']}/scan")
+    assert scan.status_code == 200
+    listed = client.get("/api/findings").json()
+    by_type = {item["finding_id"]: item for item in listed}
+    sql_findings = [f for f, item in by_type.items() if item["vulnerability_type"] == "sql_injection"]
+    assert len(sql_findings) >= 1
+
+    # Find the finding from query_conditional (uses +=)
+    target = None
+    for fid in sql_findings:
+        detail = client.get(f"/api/findings/{fid}").json()
+        if "query_conditional" in (detail.get("source", {}).get("snippet", "") or ""):
+            target = fid
+            break
+    if target is None:
+        target = sql_findings[0]
+
+    _validate_and_prove_concat(client, target)
+    _approve_remediation_concat(client, target)
+    resp = client.post(f"/api/findings/{target}/remediation/proposal")
+    assert resp.status_code == 200
+    record = resp.json()
+    assert record["status"] == "proposed"
+    proposal = record["proposal"]
+    assert proposal["strategy"] == "parameterize_query"
+    assert "?" in proposal["after"]
+
+
+def test_concat_full_lifecycle(client):
+    """Full lifecycle with concatenated SQL: propose -> apply -> re-prepare -> rescan -> verify."""
+    project = _create_concat_project(client)
+    scan = client.post(f"/api/projects/{project['id']}/scan")
+    assert scan.status_code == 200
+    listed = client.get("/api/findings").json()
+    by_type = {item["finding_id"]: item for item in listed}
+    sql_findings = [f for f, item in by_type.items() if item["vulnerability_type"] == "sql_injection"]
+    assert len(sql_findings) >= 1
+
+    # Use the first SQL injection finding (simple concat)
+    target = sql_findings[0]
+    _validate_and_prove_concat(client, target)
+    _approve_remediation_concat(client, target)
+
+    # Propose
+    proposal_resp = client.post(f"/api/findings/{target}/remediation/proposal")
+    assert proposal_resp.status_code == 200
+    record = proposal_resp.json()
+    assert record["status"] == "proposed"
+    assert record["proposal"]["strategy"] == "parameterize_query"
+
+    # Apply
+    apply_resp = client.post(
+        f"/api/findings/{target}/remediation/apply",
+        json={"confirm": True},
+    )
+    assert apply_resp.status_code == 200
+    assert apply_resp.json()["status"] == "applied"
+
+    # Re-prepare
+    reprepare_resp = client.post(f"/api/projects/{project['id']}/reprepare")
+    assert reprepare_resp.status_code == 200
+    assert reprepare_resp.json()["status"] == "prepared"
+
+    # Rescan
+    rescan = client.post(f"/api/projects/{project['id']}/scan")
+    assert rescan.status_code == 200
+    new_ids = rescan.json()["finding_ids"]
+    assert target not in new_ids, f"finding {target} should be gone after remediation"
+
+    # Verify
+    verify_resp = client.post(f"/api/findings/{target}/remediation/verify")
+    assert verify_resp.status_code == 200
+    body = verify_resp.json()
+    assert body["status"] == "verified"
+    assert body["verification"] == "verified"

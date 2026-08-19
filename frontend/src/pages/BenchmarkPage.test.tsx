@@ -341,9 +341,7 @@ describe("our scanner metrics", () => {
     expect(ours.value("Precision")).toBe("100%");
     expect(ours.value("Recall")).toBe("100%");
     expect(ours.value("F1")).toBe("100%");
-  });
-
-  it("renders execution time from the backend duration", async () => {
+  });  it("renders execution time from the backend duration", async () => {
     renderPage(stubApi({ list: listOf(report()), reportById: { [ID_A]: report() } }));
     await loaded();
     await screen.findByRole("region", { name: "Our Scanner" });
@@ -719,8 +717,7 @@ describe("run benchmark flow", () => {
   });
 });
 
-describe("benchmark safety", () => {
-  it("only ever talks to the backend benchmark API", async () => {
+describe("benchmark safety", () => {  it("only ever talks to the backend benchmark API", async () => {
     const onCall = vi.fn();
     const rep = report();
     renderPage(

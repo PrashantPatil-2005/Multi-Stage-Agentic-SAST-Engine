@@ -4,10 +4,10 @@ Generates a :class:`RemediationProposal` for one finding and applies it to a
 workspace copy of the repository. The transforms are intentionally
 conservative and per-vulnerability-type:
 
-* ``sql_injection``: parameterize an f-string query argument
-  (``cursor.execute(f"... {x}")`` -> ``cursor.execute("... ?", (x,))``).
-  A genuine parameterization; only applied when the sink argument is an
-  f-string on a single line.
+* ``sql_injection``: parameterize a query argument — handles f-strings,
+  string concatenation (``+``), and augmented assignment (``+=``).
+  A genuine parameterization; only applied when the query structure can
+  be safely decomposed into literal segments and variable placeholders.
 * ``command_injection``: neutralize the shell path -
   ``subprocess.run(cmd, shell=True)`` -> ``subprocess.run(shlex.split(cmd))``
   (argument-vector form, documented safe) and ``os.system(cmd)`` ->
@@ -85,39 +85,52 @@ def _sql_proposal(finding: CandidateFinding, source: str) -> RemediationProposal
     if not call.args:
         return _no_fix(finding, "sink call has no query argument")
     query_arg = call.args[0]
-    if isinstance(query_arg, ast.Name):
-        query_arg = _resolve_assigned_fstring(tree, query_arg.id)
-        if query_arg is None:
-            return _no_fix(
-                finding,
-                "query argument is an unresolved variable; automatic "
-                "parameterization is not safe here",
-            )
-    if not isinstance(query_arg, ast.JoinedStr) or not any(
+
+    # Strategy 1: direct f-string or assigned f-string variable.
+    fstring_parts: list[str] | None = None
+    fstring_params: list[str] | None = None
+
+    if isinstance(query_arg, ast.JoinedStr) and any(
         isinstance(v, ast.FormattedValue) for v in query_arg.values
     ):
+        fstring_parts, fstring_params = _decompose_fstring(query_arg)
+    elif isinstance(query_arg, ast.Name):
+        resolved_fstr = _resolve_assigned_fstring(tree, query_arg.id)
+        if resolved_fstr is not None and any(
+            isinstance(v, ast.FormattedValue) for v in resolved_fstr.values
+        ):
+            fstring_parts, fstring_params = _decompose_fstring(resolved_fstr)
+
+    # Strategy 2: string concatenation (``+``) or augmented assignment (``+=``).
+    concat_segments: list[tuple[str, str]] | None = None
+    if fstring_parts is None and isinstance(query_arg, ast.Name):
+        enclosing = _find_enclosing_function(tree, line_no)
+        concat_segments = _resolve_assigned_concatenation(
+            tree, query_arg.id, enclosing_fn=enclosing
+        )
+
+    if fstring_parts is not None and fstring_params is not None:
+        new_query = "".join(fstring_parts)
+        params: list[str] = fstring_params
+    elif concat_segments is not None:
+        # Build query template and param list from concatenation segments.
+        query_parts: list[str] = []
+        params = []
+        for literal, var_expr in concat_segments:
+            if literal == "?":
+                query_parts.append("?")
+                params.append(var_expr)
+            else:
+                query_parts.append(literal)
+        new_query = "".join(query_parts)
+    else:
         return _no_fix(
             finding,
-            "query argument is not an f-string; automatic "
+            "query argument cannot be decomposed into a parameterizable "
+            "form (f-string or string concatenation); automatic "
             "parameterization is not safe here",
         )
-    try:
-        unparsed = {id(v): ast.unparse(v.value) for v in query_arg.values if isinstance(v, ast.FormattedValue)}
-    except Exception as exc:  # noqa: BLE001 - unparse can fail on exotic nodes
-        return _no_fix(finding, f"query argument cannot be rewritten ({exc})")
 
-    parts: list[str] = []
-    params: list[str] = []
-    for value in query_arg.values:
-        if isinstance(value, ast.Constant):
-            parts.append(str(value.value))
-        elif isinstance(value, ast.FormattedValue):
-            parts.append("?")
-            params.append(unparsed[id(value)])
-        else:
-            return _no_fix(finding, "unsupported f-string part; automatic fix unavailable")
-
-    new_query = "".join(parts)
     new_args = [
         ast.Constant(value=new_query),
         ast.Tuple(elts=[ast.parse(p, mode="eval").body for p in params], ctx=ast.Load()),
@@ -150,6 +163,30 @@ def _sql_proposal(finding: CandidateFinding, source: str) -> RemediationProposal
     )
 
 
+def _decompose_fstring(fstr: ast.JoinedStr) -> tuple[list[str], list[str]] | None:
+    """Decompose an f-string into literal parts and parameter expressions.
+
+    Returns ``(parts, params)`` where *parts* alternates between SQL literal
+    segments and ``"?"`` placeholders, and *params* holds the unparsed
+    variable expressions for each placeholder.  Returns ``None`` when the
+    f-string cannot be safely decomposed.
+    """
+    parts: list[str] = []
+    params: list[str] = []
+    for value in fstr.values:
+        if isinstance(value, ast.Constant):
+            parts.append(str(value.value))
+        elif isinstance(value, ast.FormattedValue):
+            try:
+                params.append(ast.unparse(value.value))
+            except Exception:  # noqa: BLE001
+                return None
+            parts.append("?")
+        else:
+            return None
+    return parts, params
+
+
 def _resolve_assigned_fstring(tree: ast.Module, name: str) -> ast.JoinedStr | None:
     """Resolve ``name = f"..."`` to the JoinedStr value (module scope scan)."""
     found: list[ast.JoinedStr] = []
@@ -168,6 +205,84 @@ def _resolve_assigned_fstring(tree: ast.Module, name: str) -> ast.JoinedStr | No
     if len(found) != 1:
         return None
     return found[0]
+
+
+def _collect_concat_parts(node: ast.AST) -> list[ast.AST]:
+    """Recursively flatten a ``BinOp(Add)`` tree into its constituent parts.
+
+    ``"a" + b + "c"`` → ``[Constant("a"), Name("b"), Constant("c")]``.
+    Non-BinOp nodes are returned as-is.
+    """
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return _collect_concat_parts(node.left) + _collect_concat_parts(node.right)
+    return [node]
+
+
+def _resolve_assigned_concatenation(
+    tree: ast.Module, name: str, *, enclosing_fn: ast.AST | None = None
+) -> list[tuple[str, str]] | None:
+    """Resolve all assignments to *name* built with string concatenation.
+
+    Handles both ``name = ... + ...`` and ``name += ... + ...``.  When
+    *enclosing_fn* is provided the search is scoped to that function's body
+    (preventing cross-function false positives).  Returns a list of
+    ``(literal_text, variable_expression)`` pairs representing the
+    parameterised query segments, or ``None`` when the assignment cannot be
+    safely decomposed.
+
+    Each tuple is one of:
+
+    * ``("literal_text", "")`` — a SQL literal segment.
+    * ``("?", "variable_expression")`` — a parameter placeholder.
+
+    The caller builds the new query string from the literal segments and the
+    parameter list from the variable expressions.
+    """
+    assignments: list[ast.AST] = []
+    search_root = enclosing_fn if enclosing_fn is not None else tree
+
+    def _collect(node: ast.AST) -> None:
+        for child in ast.iter_child_nodes(node):
+            # When scoping to a function, do not descend into nested
+            # functions or classes — they have their own local scope.
+            if enclosing_fn is not None and isinstance(
+                child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+            ):
+                continue
+            if isinstance(child, ast.Assign) and child.value is not None:
+                targets = (
+                    child.targets if isinstance(child.targets, list) else [child.target]
+                )
+                if any(isinstance(t, ast.Name) and t.id == name for t in targets):
+                    assignments.append(child.value)
+            elif isinstance(child, ast.AugAssign) and isinstance(child.target, ast.Name) and child.target.id == name:
+                if isinstance(child.op, ast.Add):
+                    assignments.append(child.value)
+                else:
+                    return  # non-Add augmented op: bail
+            _collect(child)
+
+    _collect(search_root)
+    if not assignments:
+        return None
+
+    segments: list[tuple[str, str]] = []
+    for value in assignments:
+        parts = _collect_concat_parts(value)
+        for part in parts:
+            if isinstance(part, ast.Constant) and isinstance(part.value, str):
+                segments.append((part.value, ""))
+            elif isinstance(part, (ast.Name, ast.Attribute, ast.Subscript)):
+                try:
+                    expr = ast.unparse(part)
+                except Exception:  # noqa: BLE001
+                    return None
+                segments.append(("?", expr))
+            else:
+                # Non-literal, non-variable node (e.g. function call, complex
+                # expression): we cannot safely parameterise this.
+                return None
+    return segments
 
 
 def _render_statement_line(
@@ -197,7 +312,7 @@ def _render_statement_line(
     rendered = ast.unparse(_Swap().visit(statement)).splitlines()
     if not rendered:
         return ast.unparse(new_call)
-    return indent + rendered[0]
+    return "\n".join(indent + rline for rline in rendered)
 
 
 def _find_statement_at(tree: ast.Module, line: int) -> ast.AST | None:
@@ -279,6 +394,17 @@ def _cmd_proposal(finding: CandidateFinding, source: str) -> RemediationProposal
     )
 
 
+def _find_enclosing_function(tree: ast.Module, line: int) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
+    """Find the function (or async function) that contains the given line."""
+    best: ast.FunctionDef | ast.AsyncFunctionDef | None = None
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.lineno <= line <= (node.end_lineno or node.lineno):
+                if best is None or (node.lineno >= best.lineno):
+                    best = node
+    return best
+
+
 def _find_call_at(tree: ast.Module, line: int) -> ast.Call | None:
     """Locate the Call node whose statement starts at ``line`` (or nearest)."""
     candidates: list[ast.Call] = []
@@ -328,9 +454,24 @@ def apply_proposal(proposal: RemediationProposal, source: str) -> str:
             "source changed since the proposal was generated; "
             "generate a new proposal before applying"
         )
-    lines[idx] = proposal.after
-    if lines[idx] and not lines[idx].endswith(("\n", "\r")):
-        lines[idx] += "\n"
+    start_indent = len(current) - len(current.lstrip(" \t"))
+    end_idx = idx + 1
+    while end_idx < len(lines):
+        nxt = lines[end_idx].rstrip("\r\n")
+        if not nxt:
+            break
+        nxt_indent = len(nxt) - len(nxt.lstrip(" \t"))
+        if nxt_indent > start_indent:
+            end_idx += 1
+            continue
+        if nxt_indent == start_indent and nxt.strip() in (")", "]", "}"):
+            end_idx += 1
+            break
+        break
+    new_lines = proposal.after.splitlines(keepends=True)
+    if new_lines and not new_lines[-1].endswith(("\n", "\r")):
+        new_lines[-1] += "\n"
+    lines[idx:end_idx] = new_lines
     new_source = "".join(lines)
     if proposal.import_to_add is not None:
         new_source = _insert_import(new_source, proposal.import_to_add)

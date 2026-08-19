@@ -1,0 +1,23 @@
+services:
+  # Backend + Frontend — single Web Service
+  # The FastAPI app serves the built frontend from frontend/dist in production.
+  - type: web
+    name: sast-backend
+    runtime: python
+    plan: starter
+    buildCommand: |
+      cd frontend && npm ci && npm run build
+      cd ../backend && pip install .
+    startCommand: bash start.sh
+    envVars:
+      - key: SAST_DATABASE_URL
+        value: sqlite:///./sast.db
+      - key: SAST_LOG_LEVEL
+        value: INFO
+      # LLM config — set these in Render dashboard
+      - key: LLM_PROVIDER
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_MODEL
+        sync: false
