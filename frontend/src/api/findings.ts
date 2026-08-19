@@ -41,10 +41,12 @@ export class FindingsRequestError extends Error {
   }
 }
 
-export function getFindings(projectId?: string): Promise<FindingListItem[]> {
-  const url = projectId
-    ? `/api/findings?project_id=${encodeURIComponent(projectId)}`
-    : "/api/findings";
+export function getFindings(projectId?: string, search?: string): Promise<FindingListItem[]> {
+  const params = new URLSearchParams();
+  if (projectId) params.set("project_id", projectId);
+  if (search) params.set("search", search);
+  const qs = params.toString();
+  const url = qs ? `/api/findings?${qs}` : "/api/findings";
   return fetch(url).then((response) => {
     if (!response.ok) {
       throw new FindingsRequestError(

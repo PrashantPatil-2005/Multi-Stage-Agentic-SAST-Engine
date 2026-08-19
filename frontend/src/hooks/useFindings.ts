@@ -11,10 +11,10 @@ export interface FindingsState {
   reload: () => void;
 }
 
-/** Loads findings, optionally scoped to one repository (project id). When
-    scoped and the project does not exist, ``notFound`` is set instead of
-    silently falling back to the global list. */
-export function useFindings(projectId?: string): FindingsState {
+/** Loads findings, optionally scoped to one repository (project id) and/or
+    filtered by a search query. When scoped and the project does not exist,
+    ``notFound`` is set instead of silently falling back to the global list. */
+export function useFindings(projectId?: string, search?: string): FindingsState {
   const [findings, setFindings] = useState<FindingListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -26,7 +26,7 @@ export function useFindings(projectId?: string): FindingsState {
     setLoading(true);
     setError(false);
     setNotFound(false);
-    getFindings(projectId)
+    getFindings(projectId, search)
       .then((data) => {
         if (cancelled) return;
         setFindings(data);
@@ -44,7 +44,7 @@ export function useFindings(projectId?: string): FindingsState {
     return () => {
       cancelled = true;
     };
-  }, [projectId, attempt]);
+  }, [projectId, search, attempt]);
 
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
 
