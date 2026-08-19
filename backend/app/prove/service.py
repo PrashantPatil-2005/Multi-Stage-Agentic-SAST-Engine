@@ -63,15 +63,21 @@ class ProofService:
 
         plan = self._planner.plan(finding)
         if plan is None:
+            from app.prove.planner import ProofPlanner
+            planner = ProofPlanner()
+            reason = planner.unsupported_reason(finding.vulnerability_type)
+            summary = (
+                f"no proof plan exists for vulnerability type "
+                f"{finding.vulnerability_type!r}"
+            )
+            if reason:
+                summary += f" — {reason}"
             return self._result(
                 finding,
                 validation_result,
                 plan=None,
                 status="not_verified",
-                summary=(
-                    f"no proof plan exists for vulnerability type "
-                    f"{finding.vulnerability_type!r}"
-                ),
+                summary=summary,
                 duration_ms=(time.perf_counter() - started) * 1000,
                 policy=SandboxPolicy(),
             )
@@ -193,14 +199,25 @@ class ProofService:
             if match and match.group(1) == "200" and match.group(2) == "proved":
                 return (
                     "verified",
-                    (
-                        "the request reached the harness-created loopback endpoint "
-                        "(127.0.0.1, ephemeral port) and got the expected controlled "
-                        "response - input flows into an HTTP request sink"
-                    ),
+                    ("the request reached the harness-created loopback endpoint "
+                     "(127.0.0.1, ephemeral port) and got the expected controlled "
+                     "response - input flows into an HTTP request sink"),
                     artifacts,
                 )
             return "not_verified", "loopback endpoint did not answer as expected", artifacts
+
+        if plan.harness == "deserialization_proof":
+            artifacts = self._line_artifacts(out, ("PICKLE_OK", "PICKLE_MARKER", "JSON_OK"))
+            match = re.search(r"PROVED:pickle_ok=(\d+):json_ok=(\d+)", out)
+            if match and match.group(1) == "1" and match.group(2) == "0":
+                return (
+                    "verified",
+                    ("pickle.loads successfully deserialized the planner-controlled "
+                     "marker while json.loads rejected the same bytes - input flows "
+                     "into a deserialization sink that processes arbitrary payloads"),
+                    artifacts,
+                )
+            return "not_verified", "deserialization proof observation did not match expectations", artifacts
 
         return "not_verified", f"no interpretation for harness {plan.harness!r}", []
 

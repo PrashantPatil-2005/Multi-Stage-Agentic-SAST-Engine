@@ -18,6 +18,12 @@ What actually exists today (source of truth: the code in `backend/` and
   VALIDATE, PROVE and APPROVAL are separate user-triggered endpoints. A scan
   run's stage records for every unexecuted stage stay `pending` until that
   stage actually runs with an explicit `scan_run_id` context.
+- **Code Property Graph (CPG)**: `app/prepare/cpg/` builds a real graph with
+  three edge layers — AST (structural), CFG (control-flow), and DFG (data-
+  flow) — from Python's stdlib `ast` module without requiring a build. The
+  CPG is built behind the `ICodeModelBuilder` interface and is registered as
+  an alternative to the plain AST builder. The graph carries explicit nodes
+  and typed edges for source/sink analysis.
 - **Storage**: SQLite via SQLAlchemy (`SAST_DATABASE_URL`, default
   `sqlite:///./sast.db`). Every pipeline record is stored as a primary key +
   JSON `payload` of its Pydantic model (see `app/db/models.py` and
@@ -34,13 +40,20 @@ What actually exists today (source of truth: the code in `backend/` and
 - **Repository scoping**: `GET /api/findings?project_id=` returns only the
   findings owned by a project (via scan lineage; 404 for unknown projects);
   finding detail includes its owning project and every producing scan run.
+- **Vulnerability rules**: SQL injection, command injection, SSRF, and
+  **deserialization** (pickle, yaml.load, marshal, shelve, jsonpickle).
+  Deserialization is detected via taint analysis of unsafe deserialization
+  APIs with no safe variant (pickle, marshal) or missing safe Loader
+  (yaml.load).
 - **LLM providers**: `huggingface` (default) and `openai_compatible` (see
   `app/validate/providers/`); config via `LLM_*` env vars; `mock` provider
   for tests. Validation is on-demand only (no auto-validation).
 - **Proof sandbox**: `app/prove/sandbox.py` runs approved in-memory harness
   templates in a fresh temp workspace with timeouts and output caps — **no
   Docker**, no network, controlled fixtures only. Findings snippets are data,
-  never executed.
+  never executed. Supported proof types: SQL injection, command injection,
+  SSRF, and deserialization. Unsupported types are recorded with honest
+  reasons (e.g., "requires browser environment" for XSS).
 - **Approval**: in-memory store with SQLite backing; permission state machine
   (`pending → approved/rejected/changes_requested → pending`), append-only
   audit events. Reviewer identity is a static demo value
@@ -48,10 +61,17 @@ What actually exists today (source of truth: the code in `backend/` and
 - **SLA**: deterministic deadlines + a background `SlaEvaluator` that checks
   active records on a timer (`SAST_SLA_CHECK_INTERVAL_SECONDS`, default 60s)
   using the same logic as the manual check endpoint.
+- **DefectDojo integration**: `app/defectdojo/` provides a real HTTP client
+  (`httpx`) and service layer for creating remediation tickets in DefectDojo.
+  Configuration via `SAST_DEFECTDOJO_URL`, `SAST_DEFECTDOJO_API_KEY`, and
+  `SAST_DEFECTDOJO_ENABLED` env vars. When the server is unreachable or
+  credentials are wrong, the integration returns clear error states — no
+  fabricated responses. API routes at `/api/defectdojo/*`; frontend page at
+  `/defectdojo`.
 - **Frontend pages**: Overview (dashboard), Findings (with repository scope),
   Repositories (add/scan/dedup + scan history), Risk & SLA, Validation,
-  Proof, Approvals, Benchmarks, Settings (read-only), Profile (demo
-  identity), Scan Run detail (`/scans/:scanRunId`) and a not-found page.
+  Proof, Approvals, Benchmarks, DefectDojo, Settings (read-only), Profile
+  (demo identity), Scan Run detail (`/scans/:scanRunId`) and a not-found page.
 - **Benchmark**: Semgrep comparison on controlled fixtures — optional,
   **not** part of the pipeline.
 

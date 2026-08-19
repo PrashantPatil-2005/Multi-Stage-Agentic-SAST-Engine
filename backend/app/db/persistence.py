@@ -111,4 +111,8 @@ def configure_stores(session_factory) -> None:
     set_scan_run_store_factory(session_factory)
     set_benchmark_store_factory(session_factory)
     set_remediation_store_factory(session_factory)
+
+    from app.defectdojo.service import set_defectdojo_store_factory
+    set_defectdojo_store_factory(session_factory)
+
     logger.info("pipeline stores configured with database session factory")

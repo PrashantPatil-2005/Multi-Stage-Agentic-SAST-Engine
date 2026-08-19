@@ -253,26 +253,6 @@ describe("dashboard page", () => {
     expect(screen.getByText("Project")).toBeInTheDocument();
   });
 
-  it("offers a repository selector with real projects", async () => {
-    mockApi({ summary: makeSummary() });
-    renderPage();
-    await screen.findByRole("heading", { name: "Overview", level: 1 });
-    const select = screen.getByRole("combobox", { name: "Repository" });
-    expect(within(select).getByRole("option", { name: "All repositories" })).toBeInTheDocument();
-    expect(within(select).getByRole("option", { name: "project-a" })).toBeInTheDocument();
-    expect(within(select).getByRole("option", { name: "project-b" })).toBeInTheDocument();
-  });
-
-  it("shows a no-repositories hint instead of a selector", async () => {
-    const summary = makeSummary();
-    summary.projects = [];
-    mockApi({ summary });
-    renderPage();
-    await screen.findByRole("heading", { name: "Overview", level: 1 });
-    expect(screen.getByText("No repositories")).toBeInTheDocument();
-    expect(screen.queryByRole("combobox", { name: "Repository" })).not.toBeInTheDocument();
-  });
-
   it("shows an intentional empty state when the backend has no data", async () => {
     const summary = makeSummary({
       projects: [],

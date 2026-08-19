@@ -4,7 +4,7 @@ import { PageHeader } from "../components/ui/PageHeader";
 import { vulnLabel } from "../components/findings/findingsHelpers";
 import "./settings.css";
 
-const SUPPORTED_RULES = ["sql_injection", "command_injection", "ssrf"];
+const SUPPORTED_RULES = ["sql_injection", "command_injection", "ssrf", "deserialization"];
 
 export function SettingsPage() {
   return (

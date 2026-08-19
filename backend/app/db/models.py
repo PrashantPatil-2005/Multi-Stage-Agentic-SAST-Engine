@@ -150,6 +150,15 @@ class RemediationRow(Base):
     payload: Mapped[dict] = mapped_column(JSON)
 
 
+class DefectDojoTicketRow(Base):
+    """DefectDojo ticket/link record (one per finding)."""
+
+    __tablename__ = "defectdojo_tickets"
+
+    finding_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    payload: Mapped[dict] = mapped_column(JSON)
+
+
 class NotificationReadRow(Base):
     """Per-user notification read state (derived notifications with read_at)."""
 

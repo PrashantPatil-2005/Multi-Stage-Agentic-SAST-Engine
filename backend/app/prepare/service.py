@@ -23,6 +23,7 @@ from app.prepare.base import get_builder
 from app.prepare.fetcher import FetchResult, FetcherError, RepoFetcher, SecurityError
 from app.prepare.parser import PythonASTParser
 import app.prepare.python_builder  # noqa: F401  (registers the Python code model builder)
+import app.prepare.cpg.builder  # noqa: F401  (makes CPGBuilder available)
 
 logger = logging.getLogger(__name__)
 

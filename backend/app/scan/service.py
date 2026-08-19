@@ -13,6 +13,7 @@ from app.core.contracts import CodeModel
 from app.scan.models import CandidateFinding, FunctionSummary, ScanReport, ScanSummary
 from app.scan.rules import ScanRule
 from app.scan.rules.command_injection import CommandInjectionRule
+from app.scan.rules.deserialization import DeserializationRule
 from app.scan.rules.sql_injection import SqlInjectionRule
 from app.scan.rules.ssrf import SSRFRule
 from app.scan.taint_engine import TaintEngine
@@ -26,6 +27,7 @@ class ScanService:
             SqlInjectionRule(),
             CommandInjectionRule(),
             SSRFRule(),
+            DeserializationRule(),
         ]
 
     def scan(

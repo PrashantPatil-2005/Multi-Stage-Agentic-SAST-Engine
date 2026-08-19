@@ -16,6 +16,7 @@ import { ProofPage } from "./pages/ProofPage";
 import { RepositoriesPage } from "./pages/RepositoriesPage";
 import { RiskPage } from "./pages/RiskPage";
 import { ScanRunPage } from "./pages/ScanRunPage";
+import { DefectDojoPage } from "./pages/DefectDojoPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { ValidationPage } from "./pages/ValidationPage";
 import "./styles/shell.css";
@@ -34,6 +35,7 @@ const PAGES: PageSpec[] = [
   { path: "/proof", title: "Proof" },
   { path: "/approvals", title: "Approvals" },
   { path: "/benchmarks", title: "Benchmarks" },
+  { path: "/defectdojo", title: "DefectDojo" },
   { path: "/settings", title: "Settings" },
   { path: "/profile", title: "Profile" },
 ];
@@ -133,6 +135,7 @@ export default function App() {
             <Route path="/proof" element={<ProofPage />} />
             <Route path="/approvals" element={<ApprovalsPage />} />
             <Route path="/benchmarks" element={<BenchmarkPage />} />
+            <Route path="/defectdojo" element={<DefectDojoPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="*" element={<NotFoundPage />} />
