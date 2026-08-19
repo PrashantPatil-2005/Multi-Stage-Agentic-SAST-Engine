@@ -269,3 +269,135 @@ def test_recent_activity_mixes_db_projects_and_in_memory_events(client, fixture_
         "finding_validated",
         "project_created",
     ]
+
+
+# -----------------------------------------------------------------
+# Repository filtering tests
+# -----------------------------------------------------------------
+
+
+def test_dashboard_scoped_to_project_filters_findings(client, fixture_repo):
+    """When project_id is supplied, only that project's findings appear."""
+    # Create two projects and scan both
+    resp_a = client.post(
+        "/api/projects",
+        json={
+            "name": "repo-a",
+            "source_type": "directory",
+            "location": str(fixture_repo),
+        },
+    )
+    assert resp_a.status_code == 201
+    pid_a = resp_a.json()["id"]
+    scan_a = client.post(f"/api/projects/{pid_a}/scan")
+    assert scan_a.status_code == 200
+    finding_ids_a = set(scan_a.json()["finding_ids"])
+
+    resp_b = client.post(
+        "/api/projects",
+        json={
+            "name": "repo-b",
+            "source_type": "directory",
+            "location": str(fixture_repo),
+        },
+    )
+    assert resp_b.status_code == 201
+    pid_b = resp_b.json()["id"]
+    scan_b = client.post(f"/api/projects/{pid_b}/scan")
+    assert scan_b.status_code == 200
+    finding_ids_b = set(scan_b.json()["finding_ids"])
+
+    # Unscoped: all findings present
+    unscoped = client.get("/api/dashboard/summary").json()
+    assert unscoped["kpis"]["total_findings"]["value"] >= len(finding_ids_a) + len(finding_ids_b)
+
+    # Scoped to repo-a
+    scoped_a = client.get(f"/api/dashboard/summary?project_id={pid_a}").json()
+    # The projects list should show only repo-a
+    assert len(scoped_a["projects"]) == 1
+    assert scoped_a["projects"][0]["name"] == "repo-a"
+
+    # Scoped to repo-b
+    scoped_b = client.get(f"/api/dashboard/summary?project_id={pid_b}").json()
+    assert len(scoped_b["projects"]) == 1
+    assert scoped_b["projects"][0]["name"] == "repo-b"
+
+
+
+def test_dashboard_scoped_pipeline_and_kpis_reflect_project(client, fixture_repo):
+    """Pipeline and KPIs reflect the scoped project's data."""
+    resp = client.post(
+        "/api/projects",
+        json={
+            "name": "solo-app",
+            "source_type": "directory",
+            "location": str(fixture_repo),
+        },
+    )
+    assert resp.status_code == 201
+    pid = resp.json()["id"]
+    scan_resp = client.post(f"/api/projects/{pid}/scan")
+    assert scan_resp.status_code == 200
+    finding_ids = set(scan_resp.json()["finding_ids"])
+
+    # Assess and validate some findings from this project
+    for fid in list(finding_ids)[:2]:
+        finding = get_finding_store().get(fid)
+        _assess(finding, priority="P1", score=75)
+        _validate(finding, "true_positive")
+
+    # Scoped
+    body = client.get(f"/api/dashboard/summary?project_id={pid}").json()
+    stages = {s["stage"]: s for s in body["pipeline"]}
+    assert stages["SCAN"]["count"] == len(finding_ids)
+    assert body["kpis"]["total_findings"] == {"available": True, "value": len(finding_ids)}
+    assert body["kpis"]["pending_validation"]["value"] >= 0
+    assert stages["VALIDATE"]["count"] == 2
+    assert stages["PROVE"]["count"] is None
+
+
+def test_dashboard_scoped_to_project_with_no_scans(client, fixture_repo):
+    """A project with no scans shows empty scoped data (no findings)."""
+    resp = client.post(
+        "/api/projects",
+        json={
+            "name": "no-scan-yet",
+            "source_type": "directory",
+            "location": str(fixture_repo),
+        },
+    )
+    assert resp.status_code == 201
+    pid = resp.json()["id"]
+
+    body = client.get(f"/api/dashboard/summary?project_id={pid}").json()
+    assert body["kpis"]["total_findings"] == {"available": False, "value": 0}
+    stages = {s["stage"]: s for s in body["pipeline"]}
+    assert stages["SCAN"]["count"] is None
+    assert len(body["critical_findings"]) == 0
+
+
+def test_dashboard_scoped_to_unknown_project(client):
+    """An invalid project_id still returns a valid (empty-scoped) response."""
+    body = client.get("/api/dashboard/summary?project_id=nonexistent").json()
+    assert body["kpis"]["total_findings"] == {"available": False, "value": 0}
+    assert body["projects"] == []
+
+
+def test_dashboard_all_filter_restores_unfiltered(client, fixture_repo):
+    """project_id=all behaves the same as no project_id."""
+    resp = client.post(
+        "/api/projects",
+        json={
+            "name": "demo-app",
+            "source_type": "directory",
+            "location": str(fixture_repo),
+        },
+    )
+    assert resp.status_code == 201
+    scan_resp = client.post(f"/api/projects/{resp.json()["id"]}/scan")
+    assert scan_resp.status_code == 200
+
+    unscoped = client.get("/api/dashboard/summary").json()
+    all_param = client.get("/api/dashboard/summary?project_id=all").json()
+    assert unscoped["kpis"]["total_findings"] == all_param["kpis"]["total_findings"]
+    assert len(unscoped["projects"]) == len(all_param["projects"])

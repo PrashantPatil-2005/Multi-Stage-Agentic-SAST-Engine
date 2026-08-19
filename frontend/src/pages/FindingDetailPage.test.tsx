@@ -10,6 +10,22 @@ import type { FindingDetail } from "../api/findingDetail";
 import type { ScanRun } from "../api/scans";
 import { FindingDetailPage } from "./FindingDetailPage";
 
+vi.mock("../context/AuthContext", () => ({
+  useAuth: () => ({
+    user: {
+      id: "u1",
+      username: "manager",
+      display_name: "Security Manager",
+      role: "manager",
+      is_active: true,
+    },
+    loading: false,
+    isAuthenticated: true,
+    login: vi.fn(),
+    logout: vi.fn(),
+  }),
+}));
+
 function detail(overrides: Partial<FindingDetail>): FindingDetail {
   return {
     finding_id: "f-sql-1",
@@ -3491,7 +3507,7 @@ describe("finding approval decisions", () => {
     ).toBeInTheDocument();
   });
 
-  it("states the demo reviewer identity and no authentication in the decision modal", async () => {
+  it("states the authenticated reviewer identity in the decision modal", async () => {
     const user = userEvent.setup();
     mockDetail(detail({}));
     renderPage();
@@ -3501,14 +3517,9 @@ describe("finding approval decisions", () => {
     );
     const dialog = screen.getByRole("dialog");
     expect(
-      within(dialog).getByText(
-        /This decision is recorded under the demo reviewer identity/,
-      ),
+      within(dialog).getByText(/This decision is recorded under/),
     ).toBeInTheDocument();
-    expect(within(dialog).getByText("security-analyst")).toBeInTheDocument();
-    expect(
-      within(dialog).getByText(/Authentication is not currently enabled/),
-    ).toBeInTheDocument();
+    expect(within(dialog).getByText("Security Manager")).toBeInTheDocument();
   });
 
   it("approves via POST with the exact decision body and shows the terminal state", async () => {
@@ -3535,7 +3546,6 @@ describe("finding approval decisions", () => {
     expect(approveCalls).toHaveLength(1);
     expect(approveCalls[0][1]?.body).toBe(
       JSON.stringify({
-        reviewed_by: "security-analyst",
         reason: "Verified and proof reviewed.",
       }),
     );
@@ -3599,7 +3609,7 @@ describe("finding approval decisions", () => {
     );
     expect(rejectCalls).toHaveLength(1);
     expect(rejectCalls[0][1]?.body).toBe(
-      JSON.stringify({ reviewed_by: "security-analyst", reason: "Risk accepted." }),
+      JSON.stringify({ reason: "Risk accepted." }),
     );
     const history = within(section).getByRole("list", { name: "Approval history" });
     expect(within(history).getByText("Pending \u2192 Rejected")).toBeInTheDocument();
@@ -3666,7 +3676,7 @@ describe("finding approval decisions", () => {
     );
     expect(resubmitCalls).toHaveLength(1);
     expect(resubmitCalls[0][1]?.body).toBe(
-      JSON.stringify({ reviewed_by: "security-analyst", reason: "Evidence added." }),
+      JSON.stringify({ reason: "Evidence added." }),
     );
     const history = within(section).getByRole("list", { name: "Approval history" });
     expect(

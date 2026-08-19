@@ -7,6 +7,22 @@ import type { ApprovalListItem, ApprovalRequest } from "../api/approvals";
 import type { FindingDetail } from "../api/findingDetail";
 import { ApprovalsPage } from "./ApprovalsPage";
 
+vi.mock("../context/AuthContext", () => ({
+  useAuth: () => ({
+    user: {
+      id: "u1",
+      username: "manager",
+      display_name: "Security Manager",
+      role: "manager",
+      is_active: true,
+    },
+    loading: false,
+    isAuthenticated: true,
+    login: vi.fn(),
+    logout: vi.fn(),
+  }),
+}));
+
 const FID1 = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
 const FID2 = "cdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
 
@@ -857,7 +873,6 @@ describe("approve flow", () => {
     const [postUrl, postInit] = posts[0];
     expect(postUrl).toBe("/api/approvals/ap-1/approve");
     expect(JSON.parse(String(postInit.body))).toEqual({
-      reviewed_by: "security-analyst",
       reason: "Verified against the evidence.",
     });
   });

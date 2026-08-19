@@ -11,7 +11,7 @@ export interface DashboardState {
   reload: () => void;
 }
 
-export function useDashboard(): DashboardState {
+export function useDashboard(projectId?: string): DashboardState {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [projects, setProjects] = useState<ProjectRef[]>([]);
   const [loading, setLoading] = useState(true);
@@ -22,7 +22,7 @@ export function useDashboard(): DashboardState {
     let cancelled = false;
     setLoading(true);
     setError(false);
-    Promise.all([getDashboardSummary(), getProjects()])
+    Promise.all([getDashboardSummary(projectId), getProjects()])
       .then(([summaryData, projectData]) => {
         if (cancelled) return;
         setSummary(summaryData);
@@ -37,7 +37,7 @@ export function useDashboard(): DashboardState {
     return () => {
       cancelled = true;
     };
-  }, [attempt]);
+  }, [attempt, projectId]);
 
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
 

@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getApprovalForFinding,
   getApprovalHistory,
-  REVIEWER,
   submitApprovalDecision,
 } from "../api/approvals";
 import type {
@@ -107,7 +106,6 @@ export function useApprovalReview(
       setSuccess(null);
       try {
         const updated = await submitApprovalDecision(approvalId, kind, {
-          reviewed_by: REVIEWER,
           reason,
         });
         setRequest(updated);

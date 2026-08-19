@@ -72,8 +72,11 @@ export async function fetchJson<T>(path: string): Promise<T> {
   return (await response.json()) as T;
 }
 
-export function getDashboardSummary(): Promise<DashboardSummary> {
-  return fetchJson<DashboardSummary>("/api/dashboard/summary");
+export function getDashboardSummary(projectId?: string): Promise<DashboardSummary> {
+  const params = new URLSearchParams();
+  if (projectId) params.set("project_id", projectId);
+  const qs = params.toString();
+  return fetchJson<DashboardSummary>(`/api/dashboard/summary${qs ? `?${qs}` : ""}`);
 }
 
 export function getProjects(): Promise<ProjectRef[]> {

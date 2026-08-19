@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../context/AuthContext";
 import { useDashboard } from "../hooks/useDashboard";
@@ -135,8 +135,23 @@ export function DashboardPage({
   description = "Security posture at a glance.",
 }: DashboardPageProps) {
   const { user } = useAuth();
-  const { summary, projects, loading, error, reload } = useDashboard();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedProjectId = searchParams.get("project") || undefined;
+  const { summary, projects, loading, error, reload } = useDashboard(selectedProjectId);
   const role = user?.role;
+
+  function handleProjectChange(event: React.ChangeEvent<HTMLSelectElement>) {
+    const value = event.target.value;
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (value && value !== "all") {
+        next.set("project", value);
+      } else {
+        next.delete("project");
+      }
+      return next;
+    });
+  }
 
   const pageDescription = role ? undefined : description;
 
@@ -152,7 +167,8 @@ export function DashboardPage({
               <select
                 className="dash-repo-select__control"
                 aria-label="Repository"
-                disabled
+                value={selectedProjectId ?? "all"}
+                onChange={handleProjectChange}
               >
                 <option value="all">All repositories</option>
                 {projects.map((project) => (
@@ -161,9 +177,6 @@ export function DashboardPage({
                   </option>
                 ))}
               </select>
-              <span className="dash-repo-select__hint">
-                (coming soon)
-              </span>
             </label>
           ) : (
             <span className="dash-repo-select__label">No repositories</span>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+import { useAuth } from "../../context/AuthContext";
 import { Button } from "../ui/Button";
-import { REVIEWER } from "../../api/approvals";
 import { approvalActionLabel } from "./approvalsHelpers";
 import type { DecisionKind } from "./ApprovalActions";
 
@@ -54,6 +54,7 @@ export function ApprovalModal({
   onConfirm,
   onClose,
 }: ApprovalModalProps) {
+  const { user } = useAuth();
   const meta = KIND_META[kind];
   const [reason, setReason] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -142,9 +143,10 @@ export function ApprovalModal({
         <p className="ap-modal__prompt">{meta.prompt}</p>
 
         <p className="ap-modal__identity">
-          This decision is recorded under the demo reviewer identity{" "}
-          <span className="ap-modal__identity-mono">{REVIEWER}</span>.
-          Authentication is not currently enabled.
+          This decision is recorded under{" "}
+          <span className="ap-modal__identity-mono">
+            {user?.display_name ?? user?.username ?? "unknown"}
+          </span>.
         </p>
 
         <label className="ap-modal__field" htmlFor="approval-reason">

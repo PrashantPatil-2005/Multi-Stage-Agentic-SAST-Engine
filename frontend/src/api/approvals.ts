@@ -7,9 +7,6 @@ export type ApprovalStatus = "pending" | "approved" | "rejected" | "changes_requ
 
 export type ApprovalDecisionKind = "approve" | "reject" | "request-changes" | "resubmit";
 
-/** Reviewer identity recorded on every decision until real auth lands. */
-export const REVIEWER = "security-analyst";
-
 export const APPROVAL_ACTION_LABEL: Record<string, string> = {
   remediation: "Remediation",
   other: "Other",
@@ -68,7 +65,6 @@ export interface ApprovalListItem {
 }
 
 export interface ApprovalDecision {
-  reviewed_by: string;
   reason: string;
 }
 
@@ -124,7 +120,7 @@ export async function submitApprovalDecision(
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(decision),
+      body: JSON.stringify({ reason: decision.reason }),
       credentials: "include",
     },
   );

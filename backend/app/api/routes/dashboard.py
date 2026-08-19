@@ -7,7 +7,7 @@ nothing is ever mutated.
 
 import logging
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
@@ -33,6 +33,7 @@ from app.risk.service import (
     all_risk_assessments,
     all_sla_records,
 )
+from app.scan.run_store import get_scan_run_store
 from app.validate.store import get_finding_store, get_validation_store
 
 logger = logging.getLogger(__name__)
@@ -146,25 +147,115 @@ def _plural(count: int, singular: str, plural: str) -> str:
     return f"{count} {singular if count == 1 else plural}"
 
 
+def _finding_ids_for_project(project_id: str) -> set[str] | None:
+    """Resolve finding IDs that belong to *project_id* via scan run lineage.
+
+    Returns ``None`` when the project has no scan runs (empty set is
+    distinguishable from "no lineage").
+    """
+    run_store = get_scan_run_store()
+    runs = run_store.runs_for_project(project_id)
+    if not runs:
+        return None  # project exists but has no scans
+    ids: set[str] = set()
+    for run in runs:
+        ids.update(run_store.finding_ids_for_run(run.scan_run_id))
+    return ids
+
+
 @router.get("/summary", response_model=DashboardSummary)
 def dashboard_summary(
     request: Request,
+    project_id: str | None = Query(default=None),
     user: User = Depends(get_current_user),
 ) -> DashboardSummary:
     finding_store = get_finding_store()
-    findings = {f.id: f for f in finding_store.all()}
-    validations = {v.finding_id: v for v in get_validation_store().all()}
-    proofs = {p.finding_id: p for p in get_proof_store().all()}
-    risks = all_risk_assessments()
-    sla_records = all_sla_records()
-    escalations = all_escalation_events()
-    approvals = get_approval_store().all()
-    approval_events = get_approval_store().all_events()
-    groups = all_groups()
-    remediation_records = get_remediation_store().all()
 
-    with request.app.state.session_factory() as session:
-        project_rows = session.query(Project).order_by(Project.created_at.desc()).all()
+    # ── project-scoped filtering via scan run lineage ─────────────────
+    scoped_finding_ids: set[str] | None = None
+    scoped_project_rows: list[Project] | None = None  # None = no filter applied
+    if project_id is not None and project_id != "all":
+        with request.app.state.session_factory() as session:
+            scoped_proj = session.get(Project, project_id)
+        if scoped_proj is not None:
+            scoped_project_rows = [scoped_proj]
+        scoped_finding_ids = _finding_ids_for_project(project_id)
+        if scoped_finding_ids is None:
+            scoped_finding_ids = set()  # project with no scans → empty
+
+    all_findings = finding_store.all()
+    findings = {
+        f.id: f
+        for f in all_findings
+        if scoped_finding_ids is None or f.id in scoped_finding_ids
+    }
+
+    all_validations = get_validation_store().all()
+    validations = {
+        v.finding_id: v
+        for v in all_validations
+        if scoped_finding_ids is None or v.finding_id in scoped_finding_ids
+    }
+
+    all_proofs = get_proof_store().all()
+    proofs = {
+        p.finding_id: p
+        for p in all_proofs
+        if scoped_finding_ids is None or p.finding_id in scoped_finding_ids
+    }
+
+    all_risks = all_risk_assessments()
+    risks = [
+        r
+        for r in all_risks
+        if scoped_finding_ids is None or r.finding_id in scoped_finding_ids
+    ]
+
+    all_sla = all_sla_records()
+    sla_records = [
+        r
+        for r in all_sla
+        if scoped_finding_ids is None or r.finding_id in scoped_finding_ids
+    ]
+
+    all_esc = all_escalation_events()
+    escalations = [
+        e
+        for e in all_esc
+        if scoped_finding_ids is None or e.finding_id in scoped_finding_ids
+    ]
+
+    all_approvals = get_approval_store().all()
+    approvals = [
+        a
+        for a in all_approvals
+        if scoped_finding_ids is None or a.finding_id in scoped_finding_ids
+    ]
+
+    all_approval_events = get_approval_store().all_events()
+    approval_events = [
+        e
+        for e in all_approval_events
+        if scoped_finding_ids is None or e.finding_id in scoped_finding_ids
+    ]
+
+    # Dedup and remediation are global — keep them unscoped for the
+    # pipeline stage counts (they represent unique patterns, not
+    # per-project counts).
+    groups = all_groups()
+    remediation_records = [
+        r
+        for r in get_remediation_store().all()
+        if scoped_finding_ids is None or r.finding_id in scoped_finding_ids
+    ]
+
+    # Projects list: when scoped, show only the selected project;
+    # otherwise show all.
+    if scoped_project_rows is not None:
+        project_rows = scoped_project_rows
+    else:
+        with request.app.state.session_factory() as session:
+            project_rows = session.query(Project).order_by(Project.created_at.desc()).all()
     projects = [
         DashboardProject(id=project.id, name=project.name)
         for project in project_rows
