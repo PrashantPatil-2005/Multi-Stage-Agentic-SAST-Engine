@@ -13,6 +13,7 @@ import { PRIORITIES, RepositoryTable } from "../components/repositories/Reposito
 import { RepositoryFilters } from "../components/repositories/RepositoryFilters";
 import { RepositorySummary as RepositorySummaryCard } from "../components/repositories/RepositorySummary";
 import { ScanHistory } from "../components/repositories/ScanHistory";
+import { ReportButton } from "../components/report/ReportButton";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { PageHeader } from "../components/ui/PageHeader";
@@ -308,6 +309,7 @@ export function RepositoriesPage() {
         description="Projects and repositories monitored by the security scanner"
         actions={
           <>
+            <ReportButton />
             <Button variant="primary" onClick={openAddRepository}>
               Add Repository
             </Button>

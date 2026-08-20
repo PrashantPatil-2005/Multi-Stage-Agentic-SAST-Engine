@@ -14,8 +14,8 @@ code evidence and confirms exploitability before anything is acted upon.
 
 PREPARE → SCAN → DEDUPLICATE → RISK → SLA → VALIDATE → PROVE → APPROVAL
 
-1. PREPARE: parse the repo into a code model (Python AST; CPG later) — no compilation needed
-2. SCAN: taint/data-flow analysis → candidate findings (SQLi, command injection, SSRF)
+1. PREPARE: parse the repo into a code model (Python AST + CPG; AST + CFG + DFG) — no compilation needed
+2. SCAN: taint/data-flow analysis → candidate findings (SQLi, command injection, SSRF, deserialization)
 3. DEDUPLICATE: group structurally identical findings across repositories (see `backend/app/dedup/README.md`)
 4. RISK: deterministic risk score + priority (see `backend/app/risk/README.md`)
 5. SLA: deadline per priority, breach escalation (see `backend/app/risk/README.md`)
@@ -35,32 +35,39 @@ are not a claim of real-world accuracy.
 ## Tech Stack
 
 - Backend: Python + FastAPI, pytest
-- Analysis: Python AST (CPG-extensible interface)
-- Database: SQLite for local dev / tests (PostgreSQL-ready)
+- Analysis: Python AST + Code Property Graph (CPG; AST + CFG + DFG)
+- Database: SQLite via SQLAlchemy for local dev / tests (PostgreSQL-ready)
+- Auth: bcrypt password hashing, server-side sessions (HttpOnly cookies), RBAC (4 roles)
 - LLM: provider-agnostic (OpenAI-compatible, env-configured; verified against Hugging Face)
-- Frontend: React + TypeScript + Vite
-- Tooling: Docker Compose, Semgrep baseline comparison
+- Frontend: React 18 + TypeScript + Vite, React Router 6
+- Integrations: DefectDojo (external ticketing), Semgrep (optional benchmark)
+- Deployment: Render.com (see `render.yaml`)
 
 ## Status
 
 - [x] PREPARE: repository ingestion + Python AST parsing + ProjectSnapshot + API
+- [x] PREPARE: Code Property Graph (CPG) builder (AST + CFG + DFG; see `backend/app/prepare/cpg/`)
 - [x] SCAN: SQL Injection
 - [x] SCAN: Command Injection
 - [x] SCAN: SSRF (see `backend/app/scan/README.md`)
+- [x] SCAN: Deserialization (pickle, yaml.load, marshal, shelve, jsonpickle)
 - [x] Cross-repository finding deduplication (see `backend/app/dedup/README.md`)
 - [x] Risk prioritization (see `backend/app/risk/README.md`)
 - [x] SLA tracking and escalation (see `backend/app/risk/README.md`)
 - [x] VALIDATE: LLM-assisted finding validation (see `backend/app/validate/README.md`)
 - [x] PROVE: sandboxed verification (see `backend/app/prove/README.md`)
 - [x] Human approval workflow (see `backend/app/approval/README.md`)
+- [x] Remediation workflow (propose → apply → verify; see `backend/app/remediation/`)
+- [x] Authentication & RBAC (bcrypt + server-side sessions; 4 roles, ~30 permissions)
+- [x] DefectDojo integration (external ticketing for remediation tracking)
+- [x] Notifications system
 - [x] Semgrep benchmark (optional evaluation path; see `backend/app/benchmark/README.md`)
-- [x] Dashboard overview (frontend; read-only summary API in `backend/app/api/routes/dashboard.py`)
-- [x] Findings list (frontend; read-only API in `backend/app/api/routes/findings.py`)
+- [x] Full frontend: Dashboard, Findings, Repositories, Risk, Validation, Proof, Approvals, Benchmark, DefectDojo, Settings, Profile, Login
 
 ## Known Limitations
 
 - Pipeline state (projects, findings, risk, SLA, validation, proof, approval,
-  benchmark and scan-run records) is persisted to **SQLite** (single process).
+  remediation, benchmark and scan-run records) is persisted to **SQLite** (single process).
   There is no distributed worker setup, no automatic pipeline chaining, no
   per-stage re-runs and no PostgreSQL/Alembic deployment today.
 - LLM validation requires a live, configured model (see `.env.example`). It is
@@ -68,13 +75,56 @@ are not a claim of real-world accuracy.
   demand so no hidden cloud calls happen during a demo.
 - The proof sandbox must never execute untrusted code on the host; it is
   designed for controlled fixtures only.
-- Only three vulnerability rules (SQLi, command injection, SSRF) are implemented.
-- Frontend "coming soon" controls (global search, repository selector,
-  notifications, profile menu) are placeholders and are disabled; the
-  per-page filters and search that exist are functional.
-- Authentication is not implemented. Approval decisions are recorded under a
-  static demo reviewer identity (`security-analyst`); it is not a verified
-  human account.
+- Four vulnerability rules are implemented: SQL injection, command injection,
+  SSRF, and deserialization. Additional rules require new taint-source/sink pairs.
+- Only Python repositories are supported for ingestion (CPG-extensible interface
+  exists for future languages).
+- DefectDojo integration requires a running DefectDojo instance with API access.
+- Authentication uses server-side sessions (no JWT/token-based API auth yet).
+
+## Authentication & Authorization
+
+The platform uses bcrypt password hashing with server-side sessions stored in
+SQLite. Sessions are managed via HttpOnly cookies. Role-based access control
+(RBAC) enforces permissions per endpoint.
+
+**Roles:** `analyst`, `manager`, `developer`, `auditor`
+
+| Role | Capabilities |
+|---|---|
+| analyst | View all + scan, deduplicate, validate, prove, assess risk, manage SLA, request approval, run benchmarks |
+| manager | All analyst permissions + approve/reject/resubmit, propose/apply/verify remediation, delete repositories |
+| developer | View all + propose/apply/verify remediation, scan, create repositories |
+| auditor | Read-only access to all resources |
+
+Demo users are seeded automatically on first startup. See `backend/app/auth/seed.py`.
+
+## Remediation Workflow
+
+After a finding is approved, developers can propose, apply, and verify remediation
+patches. Patches are deterministic line-anchored edits generated from the finding's
+code evidence. The workflow:
+
+1. **Propose** — generates a remediation patch from the finding's code evidence
+2. **Apply** — writes the patch to the repository's workspace copy
+3. **Verify** — re-scans the patched code to confirm the vulnerability is resolved
+
+See `backend/app/remediation/` for details.
+
+## DefectDojo Integration
+
+The platform can create external tickets in DefectDojo for findings that require
+tracking outside the system. Requires a running DefectDojo instance with API access
+configured via `SAST_DEFECTDOJO_*` environment variables.
+
+See `backend/app/defectdojo/` for details.
+
+## Deployment
+
+The project includes a Render.com deployment configuration (`render.yaml`) that
+builds the frontend, installs the backend, and runs `start.sh` (which launches
+`python -m uvicorn app.main:app`). In production, the FastAPI app serves the
+built frontend from `frontend/dist/`.
 
 ## Running the backend
 
@@ -98,7 +148,7 @@ Requirements: Node.js + npm.
 ```powershell
 cd frontend
 npm install
-npm run dev                           # http://127.0.0.1:5173 (proxies /api to :8000)
+npm run dev                           # http://127.0.0.1:5173 (proxies /api to :8080)
 ```
 
 Production build: `npm run build` (outputs to `frontend/dist/`).
@@ -124,52 +174,57 @@ The complete user journey, driven entirely from the UI (start the backend
 `uvicorn app.main:app` and the frontend `npm run dev`, then open
 http://127.0.0.1:5173):
 
-1. **Add a repository** — Repositories → Add Repository (Git URL, or use a
+1. **Log in** — use the Login page (demo users are seeded automatically:
+   `admin`/`admin` for manager role, `analyst`/`analyst` for analyst role).
+2. **Add a repository** — Repositories → Add Repository (Git URL, or use a
    directory/zip via the API examples below). PREPARE runs when the repository
    is added.
-2. **Confirm PREPARE** — the confirmation shows the real prepare summary
+3. **Confirm PREPARE** — the confirmation shows the real prepare summary
    (file count, Python files, parse failures) and the row shows the `prepared`
    status.
-3. **Scan** — click Scan on the repository row (synchronous; returns the scan
+4. **Scan** — click Scan on the repository row (synchronous; returns the scan
    run).
-4. **Open Scan History** — the repository's Scan History lists the new scan
+5. **Open Scan History** — the repository's Scan History lists the new scan
    run (newest first).
-5. **Open the Scan Run** — click "View run" to see run details and the
+6. **Open the Scan Run** — click "View run" to see run details and the
    per-stage status board (SCAN completed; the other stages `pending` until
    they run).
-6. **Open Findings** — "View Findings" on a repository opens the
+7. **Open Findings** — "View Findings" on a repository opens the
    repository-scoped finding list.
-7. **Open Finding Detail** — open any finding to see its owning repository +
+8. **Open Finding Detail** — open any finding to see its owning repository +
    producing scan runs (lineage), taint path and evidence.
-8. **Select Scan Run (if necessary)** — a finding produced by several runs
+9. **Select Scan Run (if necessary)** — a finding produced by several runs
    shows a run-context selector; pick one before acting. A single producing
    run is used automatically. No action ever guesses a "latest" run.
-9. **Deduplicate** — Deduplicate on the repository row groups structurally
-   identical findings (choose the run context when prompted).
-10. **Assess Risk** — finding → Risk panel "Assess Risk".
-11. **Start SLA** — finding → SLA panel "Start SLA" (deadline per priority).
-12. **Check SLA** — finding → SLA panel "Check SLA" to walk the deadline
+10. **Deduplicate** — Deduplicate on the repository row groups structurally
+    identical findings (choose the run context when prompted).
+11. **Assess Risk** — finding → Risk panel "Assess Risk".
+12. **Start SLA** — finding → SLA panel "Start SLA" (deadline per priority).
+13. **Check SLA** — finding → SLA panel "Check SLA" to walk the deadline
     state machine.
-13. **Validate** — finding → Validation panel "Validate" (requires `LLM_*`
+14. **Validate** — finding → Validation panel "Validate" (requires `LLM_*`
     config, see below; the button is hidden without configuration and the API
     returns 503).
-14. **Prove** — after a `true_positive` verdict, finding → Proof panel
+15. **Prove** — after a `true_positive` verdict, finding → Proof panel
     "Prove Finding"; the result shows a safe summary.
-15. **Request Approval** — an eligible (validated `true_positive` + proven
+16. **Request Approval** — an eligible (validated `true_positive` + proven
     `verified`) finding → Human Approval panel "Request Approval".
-16. **Approve** — Approvals page (or the finding's Human Approval panel)
-    records the decision under the demo reviewer identity and appends to the
-    audit trail; open "History" to review events.
-17. **Return to the Scan Run** — open the same run from Scan History again.
-18. **Verify execution history** — the run shows all eight stages
+17. **Approve** — Approvals page (or the finding's Human Approval panel)
+    records the decision under the authenticated user's identity and appends
+    to the audit trail; open "History" to review events.
+18. **Remediate** — after approval, finding → Remediation panel "Propose
+    Remediation" to generate a patch, then "Apply" to write it, and "Verify"
+    to confirm the fix.
+19. **Return to the Scan Run** — open the same run from Scan History again.
+20. **Verify execution history** — the run shows all eight stages
     (PREPARE, SCAN, DEDUPLICATE, RISK, SLA, VALIDATE, PROVE, APPROVAL) with
     the status, execution count and append-only history of each.
 
 Notes on this demo:
 
-- Approval decisions are recorded under the static demo reviewer identity
-  `security-analyst`. **Authentication is not implemented** — the reviewer is
-  a demo label, not a verified human account.
+- **Authentication is required.** The UI redirects to the Login page when
+  no session cookie is present. Approval and remediation decisions are
+  recorded under the authenticated user's identity.
 - **Stages are triggered manually.** Each step above is its own explicit
   action; there is **no automatic full-pipeline execution** — a scan never
   auto-deduplicates, risk never auto-starts an SLA, and so on. The Scan Run
@@ -178,9 +233,11 @@ Notes on this demo:
 - For a quick reproducible run you can ingest the bundled fixture repository
   via the API (a directory source — see the examples below). The fixture at
   `backend/tests/fixtures/vulnerable_python_app/` contains intentional SQLi,
-  command-injection and SSRF patterns and produces real findings.
+  command-injection, SSRF, and deserialization patterns and produces real findings.
 - **Benchmarks (optional)** — Benchmarks page runs our engine vs Semgrep on
   a controlled fixture (offline; `semgrep` on PATH is optional).
+- **DefectDojo (optional)** — DefectDojo page creates external tickets for
+  findings requiring a running DefectDojo instance with API access.
 
 The API examples below are equivalent ways to drive the same flow (e.g. to
 ingest a local directory or zip archive that the UI's Git-first form does not
@@ -192,7 +249,7 @@ cover).
 |---|---|---|
 | POST | `/api/projects` | Ingest a repo (directory / zip / git) and build its ProjectSnapshot (PREPARE) |
 | GET | `/api/projects/{id}` | Project metadata + parsed file summary |
-| DELETE | `/api/projects/{id}` | Delete a repository and everything it owns (scan runs, findings, risk/SLA, validation, proof, approval, dedup membership, prepared snapshot) |
+| DELETE | `/api/projects/{id}` | Delete a repository and everything it owns (scan runs, findings, risk/SLA, validation, proof, approval, remediation, dedup membership, prepared snapshot) |
 | GET | `/api/repositories` | Read-only repository summaries (status, findings/risk/validation/proof/SLA aggregates) |
 | POST | `/api/projects/{id}/scan` | Run the scanner on a prepared project (synchronous; populates findings; returns `scan_run_id`) |
 | GET | `/api/projects/{id}/scans` | Scan history for a project (newest first; status, counts, timestamps) |
@@ -220,6 +277,19 @@ cover).
 | POST | `/api/approvals/{id}/request-changes` | Send back for changes |
 | POST | `/api/approvals/{id}/resubmit` | changes_requested → pending (version + 1) |
 | GET | `/api/approvals/{id}/history` | Append-only audit event trail |
+| POST | `/api/findings/{id}/remediation/propose` | Propose a remediation patch for a verified finding |
+| POST | `/api/findings/{id}/remediation/apply` | Apply the proposed remediation patch |
+| POST | `/api/findings/{id}/remediation/verify` | Verify the applied remediation |
+| GET | `/api/proof-summary` | Aggregate proof metrics across findings |
+| GET | `/api/risk-summary` | Aggregate risk and SLA metrics across findings |
+| GET | `/api/validation-summary` | Aggregate validation metrics across findings |
+| GET | `/api/notifications` | List notifications for the current user |
+| PUT | `/api/notifications/{id}/read` | Mark a notification as read |
+| POST | `/api/defectdojo/tickets` | Create a DefectDojo ticket for a finding |
+| GET | `/api/defectdojo/status` | Check DefectDojo integration status |
+| POST | `/api/auth/login` | Log in (username + password; sets session cookie) |
+| POST | `/api/auth/logout` | Log out (destroys session) |
+| GET | `/api/auth/me` | Current authenticated user profile |
 | GET | `/api/benchmarks` | List benchmark reports |
 | POST | `/api/benchmarks/semgrep` | Run our engine vs Semgrep on a controlled fixture (offline; `semgrep` optional) |
 | GET | `/api/benchmarks/{benchmark_id}` | Stored benchmark report |
@@ -263,9 +333,9 @@ npx vitest run                         # full frontend suite
 ```
 
 The fixture repository `backend/tests/fixtures/vulnerable_python_app/` contains
-intentionally vulnerable patterns (SQLi, command injection, SSRF) for SCAN-stage
-testing, plus poison/syntax-error/ignored-dir files to prove the engine never
-executes target code and only ingests relevant files.
+intentionally vulnerable patterns (SQLi, command injection, SSRF, deserialization)
+for SCAN-stage testing, plus poison/syntax-error/ignored-dir files to prove the
+engine never executes target code and only ingests relevant files.
 
 ## What PREPARE produces
 

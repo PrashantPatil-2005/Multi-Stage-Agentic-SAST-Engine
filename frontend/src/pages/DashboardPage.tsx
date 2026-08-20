@@ -9,6 +9,7 @@ import { RecentActivity } from "../components/dashboard/RecentActivity";
 import { RecentScanRuns } from "../components/dashboard/RecentScanRuns";
 import { SlaSummary } from "../components/dashboard/SlaSummary";
 import { VerificationSummary } from "../components/dashboard/VerificationSummary";
+import { ReportButton } from "../components/report/ReportButton";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { PageHeader } from "../components/ui/PageHeader";
@@ -145,6 +146,7 @@ export function DashboardPage({
       <PageHeader
         title={title}
         description={pageDescription}
+        actions={<ReportButton />}
       />
 
       {role && <RoleSubtitle role={role} />}

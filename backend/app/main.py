@@ -21,6 +21,7 @@ from app.api.routes import (
     projects,
     proof_summary,
     remediation,
+    report,
     repositories,
     risk,
     risk_summary,
@@ -107,6 +108,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(repositories.router, prefix="/api")
     app.include_router(notifications.router, prefix="/api")
     app.include_router(defectdojo.router, prefix="/api")
+    app.include_router(report.router, prefix="/api")
     app.include_router(auth_routes.router, prefix="/api")
 
     @app.get("/api/health")
